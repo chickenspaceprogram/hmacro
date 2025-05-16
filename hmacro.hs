@@ -6,49 +6,59 @@ import Debug.Trace
 main = do print "asdf"
 
 data Token = Chr Char | NameStart | ScopeStart | ScopeEnd deriving (Eq, Show)
-data Gathered = Text String | Name String | LexError String | StartScope | EndScope deriving (Eq, Show)
+data Gathered = GatheredText String | Name String | LexError String | StartScope | EndScope deriving (Eq, Show)
 data ScopeElem = ScopeText String | MacroName String | Scope Scope | ParseError String deriving (Eq, Show)
 type Scope = [ScopeElem]
 data TaggedScopeElem = TaggedScopeText String | TaggedMacroName String | TaggedScope TaggedScope | TaggedParseError String deriving (Eq, Show)
 type TaggedScope = [(Int, Int, TaggedScopeElem)]
-type ErrorType = [(Int, Int, String)] -- line, col, msg
+type ErrorType = (Int, Int, String) -- line, col, msg
+
+
+type Element = (Int, Int, ElementData)
+data ElementData = Plaintext String | Elements [Element] | Macro Macro
+
+-- name, list of args
+type Macro = (String, [Element])
+
+tokenizeFolder :: Char -> [Token] -> [Token]
+tokenizeFolder '\\' (NameStart:xs) = (Chr '\\'):xs
+tokenizeFolder '\\' (ScopeStart:xs) = (Chr '{'):xs
+tokenizeFolder '\\' (ScopeEnd:xs) = (Chr '}'):xs
+tokenizeFolder '\\' xs = (NameStart):xs
+tokenizeFolder '{' xs = (ScopeStart):xs
+tokenizeFolder '}' xs = (ScopeEnd):xs
+tokenizeFolder ch xs = (Chr ch):xs
 
 tokenize :: String -> [Token]
-tokenize ('\\':'\\':xs) = (Chr '\\'):(tokenize xs)
-tokenize ('\\':'{':xs) = (Chr '{'):(tokenize xs)
-tokenize ('\\':'}':xs) = (Chr '}'):(tokenize xs)
-tokenize ('\\':xs) = NameStart:(tokenize xs)
-tokenize ('{':xs) = ScopeStart:(tokenize xs)
-tokenize ('}':xs) = ScopeEnd:(tokenize xs)
-tokenize (x:xs) = (Chr x):(tokenize xs)
-tokenize [] = []
+tokenize = foldr tokenizeFolder []
 
-isIdChar :: Token -> Bool
-isIdChar (Chr '_') = True
-isIdChar (Chr '-') = True
-isIdChar (Chr x) | isDigit x || isAsciiUpper x || isAsciiLower x = True
+isIdChar :: Char -> Bool
+isIdChar '_' = True
+isIdChar '-' = True
+isIdChar x | isDigit x || isAsciiUpper x || isAsciiLower x = True
 isIdChar _ = False
 
-isChr :: Token -> Bool
-isChr (Chr _) = True
-isChr _ = False
+gatherFolder :: Token -> [Gathered] -> [Gathered]
+gatherFolder ScopeStart acc = StartScope:acc
+gatherFolder ScopeEnd acc = EndScope:acc
+gatherFolder (Chr c) (GatheredText x:xs) = (GatheredText (c:x)):xs
+gatherFolder (Chr c) acc = (GatheredText [c]):acc
+gatherFolder NameStart acc@(GatheredText x:xs) = 
+        let (head, tail) = span isIdChar x in
+                case (head, tail) of
+                        ([], _) -> (LexError "Bad character in macro usage"):acc
+                        (h, []) -> (Name h):xs
+                        (h, t) -> (Name head):(GatheredText t):xs
+gatherFolder NameStart acc = (LexError "Bad character in macro usage"):acc
 
 gather :: [Token] -> [Gathered]
-gather (ScopeStart:xs) = StartScope:(gather xs)
-gather (ScopeEnd:xs) = EndScope:(gather xs)
-gather (NameStart:Chr x:xs) | x == '_' || x == '-' || isAsciiUpper x || isAsciiLower x = 
-        let (head, tail) = span (isIdChar) (Chr x:xs) in
-                ((Name (fmap (\(Chr c) -> c) head)):(gather tail))
-gather all@(Chr x:xs) =
-        let (head, tail) = span (isChr) all in
-                ((Text (fmap (\(Chr c) -> c) head)):(gather tail))
-gather (x:xs) = (LexError "Bad character in macro usage"):(gather xs)
-gather [] = []
+gather = foldr gatherFolder []
+
 
 scopeInternal :: [Gathered] -> (Scope, [Gathered])
 scopeInternal ((Name name):xs) = let (rest, tail) = scopeInternal xs in
         ((MacroName name):rest, tail)
-scopeInternal ((Text txt):xs) = let (rest, tail) = scopeInternal xs in
+scopeInternal ((GatheredText txt):xs) = let (rest, tail) = scopeInternal xs in
         ((ScopeText txt):rest, tail)
 scopeInternal (StartScope:xs) = case scopeInternal xs of
         (children, EndScope:tail) -> let (rest, tail') = scopeInternal tail in
@@ -85,20 +95,31 @@ tagNodesInternal pos [] = (pos, [])
 tagNodes :: Scope -> TaggedScope
 tagNodes scp = let (_, result) = tagNodesInternal (1, 1) scp in result
 
-validateScopeInternal :: (Int, Int) -> Scope -> (ErrorType, (Int, Int))
-validateScopeInternal (lineno, colno) (ParseError e:xs) = let (errs, pos') = validateScopeInternal (lineno, colno) xs in
-        (((lineno, colno, e):errs), pos')
-validateScopeInternal pos (Scope s:xs) = let (childerrs, pos') = validateScopeInternal pos s
-                                             (siblingerrs, pos'') = validateScopeInternal pos' xs in
-                                             (childerrs ++ siblingerrs, pos'')
-validateScopeInternal pos@(lineno, colno) (MacroName name:xs) = validateScopeInternal (lineno, colno + 1 + (length name)) xs
-validateScopeInternal pos@(lineno, colno) (ScopeText name:xs) = validateScopeInternal (incrementPos pos name) xs
-validateScopeInternal pos _ = ([], pos)
 
-validateScope :: Scope -> Either ErrorType Scope
-validateScope scp = case validateScopeInternal (1, 1) scp of
-                         ([], _) -> Right scp
-                         (errs, _) -> Left errs
+filterErrors :: TaggedScope -> [ErrorType]
+filterErrors ((_, _, TaggedScope scp):xs) = (filterErrors scp) ++ (filterErrors xs)
+filterErrors ((lineno, colno, TaggedParseError e):xs) = (lineno, colno, e):(filterErrors xs)
+filterErrors (_:xs) = filterErrors xs
+filterErrors [] = []
 
-parse :: String -> Either ErrorType Scope
-parse = validateScope . scope . gather . tokenize
+validateScope :: TaggedScope -> Either [ErrorType] TaggedScope
+validateScope s = case filterErrors s of
+                       [] -> Right s
+                       any -> Left any
+
+isScope :: (Int, Int, TaggedScopeElem) -> Bool
+isScope (_, _, TaggedScope _) = True
+isScope _ = False
+
+groupMacros :: TaggedScope -> [Element]
+groupMacros ((lineno, colno, TaggedMacroName name):xs) = 
+        let (args, rest) = span (isScope) xs in
+            (lineno, colno, Macro (name, map (\(i, j, TaggedScope scp) -> (i, j, Elements (groupMacros scp))) args)):(groupMacros rest)
+groupMacros ((lineno, colno, TaggedScopeText txt):xs) = (lineno, colno, Plaintext txt):(groupMacros xs)
+groupMacros ((lineno, colno, TaggedScope scp):xs) = (lineno, colno, Elements (groupMacros scp)):(groupMacros xs)
+                                                 
+
+parse :: String -> Either [ErrorType] TaggedScope
+parse = validateScope . tagNodes . scope . gather . tokenize
+
+
