@@ -1,9 +1,7 @@
 module Parsing (Element, parse, ElementData (Plaintext, Elements, Macro), Macro) where
 
-import qualified Data.Map.Strict as Map
 import Data.Char
 import Data.List
-import Text.Show.Functions
 
 data Token = Chr Char | NameStart | ScopeStart | ScopeEnd deriving (Eq, Show)
 data Gathered = GatheredText String | Name String | LexError String | StartScope | EndScope deriving (Eq, Show)
