@@ -1,4 +1,22 @@
-module Parsing (Element, parse, ElementData (Plaintext, Elements, Macro), Macro) where
+module Parser (Element, parse, ElementData (Plaintext, Elements, Macro), Macro, ErrorType) where
+
+-- hmacro - a macro-expander written in Haskell
+-- Copyright (C) 2025 Athena Boose
+--
+-- This program is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU General Public License as published by
+-- the Free Software Foundation, either version 3 of the License, or
+-- (at your option) any later version.
+
+-- This program is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-- GNU General Public License for more details.
+
+-- You should have received a copy of the GNU General Public License
+-- along with this program.  If not, see <https://www.gnu.org/licenses/>.
+--
+-- Check the file `LICENSE` for a copy of the license.
 
 import Data.Char
 import Data.List
@@ -9,9 +27,8 @@ data ScopeElem = ScopeText String | MacroName String | Scope Scope | ParseError 
 type Scope = [ScopeElem]
 data TaggedScopeElem = TaggedScopeText String | TaggedMacroName String | TaggedScope TaggedScope | TaggedParseError String deriving (Eq, Show)
 type TaggedScope = [(Int, Int, TaggedScopeElem)]
+
 type ErrorType = (Int, Int, String) -- line, col, msg
-
-
 type Element = (Int, Int, ElementData)
 data ElementData = Plaintext String | Elements [Element] | Macro Macro
 type Macro = (String, [Element])
@@ -25,6 +42,7 @@ tokenizeFolder :: Char -> [Token] -> [Token]
 tokenizeFolder '\\' (NameStart:xs) = (Chr '\\'):xs
 tokenizeFolder '\\' (ScopeStart:xs) = (Chr '{'):xs
 tokenizeFolder '\\' (ScopeEnd:xs) = (Chr '}'):xs
+tokenizeFolder '\\' (Chr '$':xs) = (Chr '\\'):(Chr '$'):xs
 tokenizeFolder '\\' xs = (NameStart):xs
 tokenizeFolder '{' xs = (ScopeStart):xs
 tokenizeFolder '}' xs = (ScopeEnd):xs
