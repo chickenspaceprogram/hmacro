@@ -1,4 +1,4 @@
-module Expander (expand) where
+module Expander (expand, gatherEithers, convertLeft) where
 
 -- hmacro - a macro-expander written in Haskell
 -- Copyright (C) 2025 Athena Boose
@@ -64,7 +64,7 @@ isIdStart ch | isAsciiUpper ch || isAsciiLower ch = True
 
 
 processExpansion :: String -> MacroExpansion
-processExpansion s = 
+processExpansion s = []
 
 parseDefArgs :: (Int, Int) -> MacroMap -> [Element] -> Either [ErrorType] MacroExpansion
 parseDefArgs (lineno, colno) mmap ((_, _, Elements name):(_, _, Elements expansion):[]) = do
