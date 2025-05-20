@@ -21,6 +21,7 @@ module Expander (expand, gatherEithers, fmapLeft) where
 import Parser
 import Iohandling
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.List
 import Data.Either
 import Data.Char
@@ -36,6 +37,20 @@ enumerate lst = zip (findIndices (const True) lst) lst
 indexMap :: [a] -> Map.Map Int a
 indexMap = Map.fromList . enumerate
 
+fmapLeft :: (a -> c) -> Either a b -> Either c b
+fmapLeft fn (Left e) = Left $ fn e
+fmapLeft _ (Right v) = Right v
+
+bindLeft :: (a -> Either b c) -> Either a c -> Either b c
+bindLeft fn (Right v) = Right v
+bindLeft fn (Left e) = fn e
+
+apLeft :: Either (a -> b) c -> Either a c -> Either b c
+apLeft fn eth = (`fmapLeft` eth) `bindLeft` fn
+
+liftA2Left :: (a -> b -> c) -> Either a v -> Either b v -> Either c v
+liftA2Left fn e1 e2 = fn `fmapLeft` e1 `apLeft` e2
+
 expandElement :: Map.Map Int String -> MacroElement -> Either String String
 expandElement _ (Text txt) = Right txt
 expandElement mp (Arg arg) = toEither ("Macro argument `" ++ show arg  ++ "` not found.") (Map.lookup arg mp)
@@ -49,14 +64,10 @@ toEither :: a -> Maybe b -> Either a b
 toEither _ (Just v) = Right v
 toEither e Nothing = Left e
 
-fmapLeft :: (a -> c) -> Either a b -> Either c b
-fmapLeft fn (Left e) = Left (fn e)
-fmapLeft fn (Right v) = Right (v)
-
 gatherEithers :: [Either [a] b] -> Either [a] [b]
 gatherEithers es = case lefts es of
-        [] -> Right (rights es)
-        ls -> Left (concat ls)
+        [] -> Right $ rights es
+        ls -> Left $ concat ls
 
 isIdStart :: Char -> Bool
 isIdStart '_' = True
@@ -94,49 +105,83 @@ concatText [e] = e
 processExpansion :: String -> MacroExpansion
 processExpansion s = (concatText) `map` (groupBy (isText) ((convert) `map` (foldr (tokenize) [] s)))
 
-parseDefArgs :: (Int, Int) -> MacroMap -> [Element] -> IO (Either [ErrorType] (String, MacroExpansion))
+parseDefArgs :: (Int, Int) -> MacroMap -> [Element] -> Either [ErrorType] (String, MacroExpansion)
 parseDefArgs (lineno, colno) mmap ((_, _, Elements name):(_, _, Elements expansion):[]) = do
         expandedName <- expandInternal mmap name
         expandedElem <- expandInternal mmap expansion
-        case (expandedName, expandedElem) of
-                (Right nm@(x:_), Right el) -> if (isIdStart x) && all (\c -> isIdStart c || isDigit c) nm
-                         then return (Right (nm, processExpansion el))
-                         else return (Left [(lineno, colno, "Macro name `" ++ nm ++ "`) contains invalid characters.")])
-                (Left errs, Right _) -> return (Left ((lineno, colno, "Encountered an error when expanding macro name."):errs))
-                (Right _, Left errs) -> return (Left ((lineno, colno, "Encountered an error when expanding macro definition.j"):errs))
-                (Left nameerrs, Left deferrs) -> return (Left ((lineno, colno, "Encountered an error when expanding macro name."):nameerrs ++ (lineno, colno, "Encountered an error when expanding macro definition.j"):deferrs))
-                _ -> return (Left [(lineno, colno, "Cannot define a macro without a name.")])
+        case expandedName of
+                (x:_) -> if (isIdStart x) && all (\c -> isIdStart c || isDigit c) expandedName && expandedName /= "def" && expandedName /= "include"
+                         then Right (expandedName, processExpansion expandedElem)
+                         else Left [(lineno, colno, "Macro name `" ++ expandedName ++ "`) contains invalid characters or is the name of an inbuilt macro.")]
+                _ -> Left [(lineno, colno, "Cannot define a macro without a name.")]
 
-parseDefArgs (row, col) mmap elems = return (Left [(row, col, "`def` macro called with an invalid number of arguments: `def` expects 2 arguments, provided " ++ show (length elems) ++ ".")])
+parseDefArgs (row, col) mmap elems = Left [(row, col, "`def` macro called with an invalid number of arguments: `def` expects 2 arguments, provided " ++ show (length elems) ++ ".")]
 
--- position -> args
-includeFile :: (Int, Int) -> [String] -> IO (Either [ErrorType] [Element])
-includeFile (lineno, colno) [name:_] = return (Left [])
-includeFile (lineno, colno) _ = return (Left [(lineno, colno, "No filename argument provided for \\include.")])
-
-expandInternal :: MacroMap -> [Element] -> IO (Either [ErrorType] String)
+-- this code needs a refactor to have two different expander functions
+-- one that only expands macros
+-- and one that converts nonmacros to text
+-- but imma be honest with you that is not happening anytime soon lmao
+expandInternal :: MacroMap -> [Element] -> Either [ErrorType] String
 expandInternal mmap ((_, _, Plaintext str):xs) = do
         result <- expandInternal mmap xs
-        return ((str ++) <$> result)
+        Right (str ++ result)
 expandInternal mmap ((_, _, Elements els):xs) = expandInternal mmap els
 expandInternal mmap ((line, col, Macro (name, args)):xs) | name == "def" = do
-        args <- parseDefArgs (line, col) mmap args
-        (\(newname, newexp) -> expandInternal (Map.insert newname newexp mmap) xs) `unwrapEither` args
+        (newname, newexp) <- parseDefArgs (line, col) mmap args
+        expandInternal (Map.insert newname newexp mmap) xs
                                                          | otherwise = do
-        expresults <- mapM (\(_, _, Elements e) -> expandInternal mmap e) args
+        expansionRules <- ((toEither [(line, col, "Macro name `" ++ name ++ "` undefined.")]) . Map.lookup name ) mmap
+        expandedArgs <- (gatherEithers . (map (\(_, _, Elements els) -> expandInternal mmap els))) args
+        result <- fmapLeft (\str -> [(line, col, str)]) (expandMacro expandedArgs expansionRules)
         rest <- expandInternal mmap xs
-        case (rest, Map.lookup name mmap) of
-                (Right txt, Just rules) -> (\a -> a ++ txt) <$> ((\el -> fmapLeft (\msg -> (line, col, msg)) (expandElement el rules)) =<< (gatherEithers expresults))
-                (Left errs, Nothing) -> return (Left((line, col, "Macro name `" ++ name ++ "` undefined."):errs))
-                (Left errs, _) -> return (Left(errs))
-                (_, Nothing) -> return (Left ([(line, col, "Macro name `" ++ name ++ "` undefined.")]))
---        gatherEithers expresults >>= (\e -> fmapLeft (\msg -> (line, col, msg)) (expandElement e -- macro element here))
---        expansionRules <- ((toEither [(line, col, "Macro name `" ++ name ++ "` undefined.")]) . Map.lookup name ) mmap
---        expandedArgs <- (gatherEithers . (map (\(_, _, Elements els) -> expandInternal mmap els))) args
---        result <- fmapLeft (\str -> [(line, col, str)]) (expandMacro expandedArgs expansionRules)
---        rest <- expandInternal mmap xs
---        return (result ++ rest)
-expandInternal _ [] = return (Right [])
+        return (result ++ rest)
+expandInternal _ [] = Right []
+
+includeFiles :: Set.Set String -> MacroMap -> [Element] -> IO (Either [ErrorType] [Element])
+includeFiles fnames mmap (el@(_, _, Plaintext str):xs) = do 
+        fils <- includeFiles fnames mmap xs
+        return $ fmap (el :) fils
+includeFiles fnames mmap ((lineno, colno, Elements els):xs) = do
+        children <- includeFiles fnames mmap els
+        siblings <- includeFiles fnames mmap xs
+        return $ catEithers (fmap (\a -> (lineno, colno, Elements a)) children) siblings
+includeFiles fnames mmap ((lineno, colno, Macro (macroname, (_, _, Elements filname):_)):xs) | macroname == "include" = do
+        argincl <- includeFiles fnames mmap filname
+        let filname' = (argincl >>= (expandInternal mmap)) >>= (\nm -> if Set.member nm fnames then Left [(lineno, colno, "The file " ++ nm ++ " has been included previously.")] else Right nm)
+        fildat <- unwrapEither (readFileExcept lineno colno) filname'
+        let elems = (fildat >>= parse)
+        case filname' of
+                Right name -> unwrapEither (\e -> includeFiles (Set.insert name fnames) mmap (e ++ xs)) elems
+                Left e -> return $ Left e
+
+includeFiles fnames mmap ((lineno, colno, Macro (macroname, [])):xs) | macroname == "include" = return $ Left [(lineno, colno, "\\include macro has no arguments: must provide a file to include.")]
+includeFiles fnames mmap ((lineno, colno, Macro (macroname, args)):xs) | macroname == "def" = do
+        valid <- includeFiles fnames mmap args
+        case parseDefArgs (lineno, colno) mmap args of
+                Left err -> return $ Left err
+                Right (name, exp) -> (includeFiles fnames (Map.insert name exp mmap) xs)
+
+        
+includeFiles fnames mmap ((lineno, colno, Macro (nm, args)):xs) = do
+        argerr <- includeFiles fnames mmap args
+        rest <- includeFiles fnames mmap xs
+        let ptres = (\txt -> (lineno, colno, Plaintext txt)) <$> ((expandInternal mmap) =<< ((\arg -> [(lineno, colno, Macro (nm, args))]) <$> argerr))
+        return $ catEithers ptres rest
+
+includeFiles _ _ [] = return $ Right []
+
+catEithers :: Either [e] v -> Either [e] [v] -> Either [e] [v]
+catEithers (Right val) (Right vals) = Right $ val:vals
+catEithers (Left e) (Left es) = Left $ e ++ es
+catEithers (Left e) _ = Left e
+catEithers _ (Left es) = Left es
+
+readFileExcept :: Int -> Int -> String -> IO (Either [ErrorType] String)
+readFileExcept lineno colno filename = do
+        result <- (stringifyException $ readFile filename)
+        return ((\a -> [(lineno, colno, "Error reading file in \\include: " ++ a)]) `fmapLeft` result)
 
 expand :: [Element] -> IO (Either [ErrorType] String)
-expand el = return (Left [])--expandInternal Map.empty
+expand els = do
+        inclres <- includeFiles Set.empty Map.empty els
+        return $ inclres >>= (expandInternal Map.empty)
