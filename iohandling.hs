@@ -1,9 +1,9 @@
-module Iohandling (unwrapEither, CliArgs (Help, Version, Files), getCliArgs, stringifyException) where
+module Iohandling (unwrapEither, CliArgs (Help, Version, License, Files), getCliArgs, stringifyException) where
 import Control.Exception
 import System.Environment
 import Debug.Trace
 
-data CliArgs = Help | Version | Files ([String], Maybe String)
+data CliArgs = Help | Version | License | Files ([String], Maybe String)
 
 -- in combo with =<< this can double-unwrap a monad containing an either
 -- evil
@@ -22,17 +22,20 @@ parseCliArgs (x:xs)
                 case rest of
                         Help -> Right Help
                         Version -> Right Version
+                        License -> Right License
                         Files (outfile:args, Nothing) -> Right (Files (args, Just outfile))
                         Files ([], _) -> Left "No output filename provided."
                         Files (_, Just str) -> Left ("Output file `" ++ str ++ "`already specified, cannot output to multiple files.")
 
                 | x == "-v" || x == "--version" = Right Version
                 | x == "--help" = Right Help
+                | x == "--license" = Right License
                 | otherwise = do
                 rest <- parseCliArgs xs
                 case rest of
                         Help -> Right Help
                         Version -> Right Version
+                        License -> Right License
                         Files (fil, out) -> Right (Files (x:fil, out))
 parseCliArgs [] = Right (Files ([], Nothing))
 
