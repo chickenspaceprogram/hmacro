@@ -20,6 +20,7 @@ module Parser (Element, parse, ElementData (Plaintext, Elements, Macro), Macro, 
 
 import Data.Char
 import Data.List
+import Debug.Trace
 
 data Token = Chr Char | NameStart | ScopeStart | ScopeEnd deriving (Eq, Show)
 data Gathered = GatheredText String | Name String | LexError String | StartScope | EndScope deriving (Eq, Show)
@@ -30,11 +31,11 @@ type TaggedScope = [(Int, Int, TaggedScopeElem)]
 
 type ErrorType = (Int, Int, String) -- line, col, msg
 type Element = (Int, Int, ElementData)
-data ElementData = Plaintext String | Elements [Element] | Macro Macro
+data ElementData = Plaintext String | Elements [Element] | Macro Macro deriving (Eq, Show)
 type Macro = (String, [Element])
 
 parse :: String -> Either [ErrorType] [Element]
-parse str = groupMacros `fmap` (validateScope . tagNodes . scope . gather . tokenize) str
+parse str = groupMacros <$> (validateScope . tagNodes . scope . gather . tokenize) str
 
 -- name, list of args
 
@@ -43,6 +44,7 @@ tokenizeFolder '\\' (NameStart:xs) = (Chr '\\'):xs
 tokenizeFolder '\\' (ScopeStart:xs) = (Chr '{'):xs
 tokenizeFolder '\\' (ScopeEnd:xs) = (Chr '}'):xs
 tokenizeFolder '\\' (Chr '$':xs) = (Chr '\\'):(Chr '$'):xs
+tokenizeFolder '\\' (Chr '\n':xs) = xs
 tokenizeFolder '\\' xs = (NameStart):xs
 tokenizeFolder '{' xs = (ScopeStart):xs
 tokenizeFolder '}' xs = (ScopeEnd):xs
@@ -102,10 +104,21 @@ scope s = case scopeInternal s of
                (scp, []) -> scp
                (scp, txt) -> scp ++ [ParseError "Extraneous closing brace"] ++ (scope txt)
 
+numNewlines :: String -> Int
+numNewlines = length . (filter ('\n' ==))
+
+incLineNo :: Char -> (Bool, Int) -> (Bool, Int)
+incLineNo ch (True, num) | ch == '\n' = (False, num)
+                         | otherwise = (True, num + 1)
+incLineNo _ v = v
+
 incrementPos :: (Int, Int) -> String -> (Int, Int)
-incrementPos (lineno, colno) str = case lines str of
-                                       [x] -> (lineno, colno + (length x))
-                                       splitstr -> (lineno + (length splitstr) - 1, (length . last) splitstr)
+incrementPos (lineno, colno) str = let (noNewLine, len) = lenLastLine str in
+                                       (lineno + (numNewlines str), len + if noNewLine then colno else 1)
+
+
+lenLastLine :: String -> (Bool, Int)
+lenLastLine = foldr (incLineNo) (True, 0)
 
 tagNodesInternal :: (Int, Int) -> Scope -> ((Int, Int), TaggedScope)
 tagNodesInternal pos@(lineno, colno) (ScopeText txt:xs) = let (pos', rest) = tagNodesInternal (incrementPos pos txt) xs in
@@ -140,9 +153,10 @@ isScope _ = False
 
 convertScope :: (Int, Int, TaggedScopeElem) -> Element
 convertScope (i, j, (TaggedScope s)) = (i, j, (Elements . groupMacros) s)
+convertScope (i, j, (TaggedScopeText txt)) = (i, j, Plaintext txt)
 
 groupFolder :: TaggedScope -> (Int, Int, TaggedScopeElem) -> (TaggedScope, [Element])
-groupFolder scp (lineno, colno, TaggedScopeText txt) = ([], map (convertScope) scp) -- flush scope stack
+groupFolder scp elem@(lineno, colno, TaggedScopeText txt) = ([], (convertScope elem):(map (convertScope) scp)) -- flush scope stack
 groupFolder scp newscp@(lineno, colno, TaggedScope _) = (newscp:scp, []) -- push onto scope stack
 groupFolder scp (lineno, colno, TaggedMacroName nm) = ([], [(lineno, colno, Macro (nm, map (convertScope) scp))]) -- flush scope stack into a macro
 

@@ -4,6 +4,7 @@ import Control.Exception
 import System.Environment
 import GHC.IO.Handle
 import System.IO
+import Debug.Trace
 
 data CliArgs = Help | Version | Files ([String], Maybe String)
 
@@ -42,20 +43,21 @@ printException monad = (\a -> case a of Right _ -> return (); Left e -> hPutStr 
 getCliArgs :: IO (Either String CliArgs)
 getCliArgs = (parseCliArgs =<<) <$> (stringifyException (getArgs)) -- evil
 
-
-
-parseFile :: String -> Either [ErrorType] String
-parseFile = (\filetext -> (parse filetext) >>= expand)
-
 convertErrMsgs :: [ErrorType] -> String
-convertErrMsgs errs = concat (map (\(lineno, colno, msg) -> "Line " ++ (show lineno) ++ ", Col " ++ (show colno) ++ ": " ++ msg ++ "\n") errs)
+convertErrMsgs errs = concat (map (\(lineno, colno, msg) -> "\x1b[1;31mError:\x1b[39m Line " ++ (show lineno) ++ ", Col " ++ (show colno) ++ ": " ++ msg ++ "\x1b[22m\n") errs)
 
-parseFiles :: CliArgs -> Either String (String, Maybe String)
-parseFiles Help = Right ("Help message here", Nothing)
-parseFiles Version = Right ("Version message here", Nothing)
-parseFiles (Files (texts, out)) = do
-        result <- (gatherEithers . (map (convertLeft (convertErrMsgs))) . (map (\a -> parse a >>= expand))) texts
-        return (concat result, out)
+-- in combo with =<< this can double-unwrap a monad containing an either
+-- evil
+unwrapEither :: Monad m => (a -> m (Either e b)) -> Either e a -> m (Either e b)
+unwrapEither fn (Right val) = fn val
+unwrapEither _ (Left e) = return (Left e)
+
+parseFiles :: CliArgs -> IO (Either String (String, Maybe String))
+parseFiles Help = return (Right ("Help message here", Nothing))
+parseFiles Version = return (Right ("Version message here", Nothing))
+parseFiles all@(Files _) = do
+        Files ((opentexts, outfile)) <- openFiles all
+        return ((\result -> Right (concat result, outfile)) =<< (gatherEithers . (map (convertLeft (convertErrMsgs))) . (map (\a -> (parse a) >>= expand))) opentexts)
 
 -- will never actually give an [ErrorType], this is a hack
 openFiles :: CliArgs -> IO CliArgs
@@ -72,5 +74,5 @@ writeResult (Right (txt, Nothing)) = hPutStr stdout txt
 
 
 main :: IO ()
-main = (printException . writeResult) =<< (parseFiles =<<) <$> getCliArgs
+main = ((printException . writeResult) =<< (unwrapEither parseFiles =<<) getCliArgs)
 

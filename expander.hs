@@ -23,8 +23,9 @@ import qualified Data.Map as Map
 import Data.List
 import Data.Either
 import Data.Char
+import Debug.Trace
 
-data MacroElement = Arg Int | Text String
+data MacroElement = Arg Int | Text String deriving (Eq, Show)
 type MacroExpansion = [MacroElement]
 type MacroMap = Map.Map String MacroExpansion
 
@@ -63,16 +64,42 @@ isIdStart ch | isAsciiUpper ch || isAsciiLower ch = True
              | otherwise = False
 
 
-processExpansion :: String -> MacroExpansion
-processExpansion s = []
+data MacroExpansionToken = Numeric Int | ArgNumeric Int | Ch Char
 
-parseDefArgs :: (Int, Int) -> MacroMap -> [Element] -> Either [ErrorType] MacroExpansion
+tokenize :: Char -> [MacroExpansionToken] -> [MacroExpansionToken]
+tokenize ch ((Numeric num):rest) | isDigit ch = (Numeric (num * 10 + (digitToInt ch))):rest
+                                          | ch == '$' = (ArgNumeric num):rest
+                                          | otherwise = (Ch ch):((map (Ch) (show num)) ++ rest)
+tokenize ch rest | isDigit ch = (Numeric (digitToInt ch)):rest
+tokenize '\\' ((ArgNumeric num):rest) = (map (Ch) (show num)) ++ rest
+tokenize ch rest = (Ch ch):rest
+
+convert :: MacroExpansionToken -> MacroElement
+convert (Numeric num) = Text (show num)
+convert (ArgNumeric num) = Arg num
+convert (Ch ch) = Text [ch]
+
+isText :: MacroElement -> MacroElement -> Bool
+isText (Text _) (Text _) = True
+isText _ _ = False
+
+unwrapText :: MacroElement -> String
+unwrapText (Text txt) = txt
+
+concatText :: [MacroElement] -> MacroElement
+concatText all@((Text txt):rest) = Text (concat (map (unwrapText) all))
+concatText [e] = e
+
+processExpansion :: String -> MacroExpansion
+processExpansion s = (concatText) `map` (groupBy (isText) ((convert) `map` (foldr (tokenize) [] s)))
+
+parseDefArgs :: (Int, Int) -> MacroMap -> [Element] -> Either [ErrorType] (String, MacroExpansion)
 parseDefArgs (lineno, colno) mmap ((_, _, Elements name):(_, _, Elements expansion):[]) = do
         expandedName <- expandInternal mmap name
         expandedElem <- expandInternal mmap expansion
         case expandedName of
                 (x:_) -> if (isIdStart x) && all (\c -> isIdStart c || isDigit c) expandedName
-                         then Right (processExpansion expandedElem)
+                         then Right (expandedName, processExpansion expandedElem)
                          else Left [(lineno, colno, "Macro name `" ++ expandedName ++ "`) contains invalid characters.")]
                 _ -> Left [(lineno, colno, "Cannot define a macro without a name.")]
 
@@ -84,12 +111,14 @@ expandInternal mmap ((_, _, Plaintext str):xs) = do
         Right (str ++ result)
 expandInternal mmap ((_, _, Elements els):xs) = expandInternal mmap els
 expandInternal mmap ((line, col, Macro (name, args)):xs) | name == "def" = do
-        newexp <- parseDefArgs (line, col) mmap args
-        expandInternal (Map.insert name newexp mmap) xs
+        (newname, newexp) <- parseDefArgs (line, col) mmap args
+        expandInternal (Map.insert newname newexp mmap) xs
                                                          | otherwise = do
         expansionRules <- ((toEither [(line, col, "Macro name `" ++ name ++ "` undefined.")]) . Map.lookup name ) mmap
         expandedArgs <- (gatherEithers . (map (\(_, _, Elements els) -> expandInternal mmap els))) args
-        convertLeft (\str -> [(line, col, str)]) (expandMacro expandedArgs expansionRules)
+        result <- convertLeft (\str -> [(line, col, str)]) (expandMacro expandedArgs expansionRules)
+        rest <- expandInternal mmap xs
+        return (result ++ rest)
 expandInternal _ [] = Right []
 
 expand :: [Element] -> Either [ErrorType] String
