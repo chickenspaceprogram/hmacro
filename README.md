@@ -25,11 +25,12 @@ Usage:
 hmacro [OPTIONS] <filename> [-o OUTFILE]
 
 `-v`, `--version` - Print a version message, then exit
-`--help` - Print a help message, then exit
+`--help`          - Print a help message, then exit
+`-o`, `--output`  - Specify a filename to output to (default: write to stdout)
+`--license`       - Display information about hmacro's license
 
-`-o`, `--output` - Specify a specific filename to output to (default is to write output to stdout)
-
-You can pass a list of filenames to hmacro. They will each be expanded separately and the results concatenated.
+You can pass a list of filenames to hmacro.
+They will each be expanded separately and the results concatenated.
 ~~~
 
 ## Example CLI invocations
