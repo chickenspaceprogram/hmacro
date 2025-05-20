@@ -1,4 +1,4 @@
-module Expander (expand, gatherEithers, convertLeft) where
+module Expander (expand, gatherEithers, fmapLeft) where
 
 -- hmacro - a macro-expander written in Haskell
 -- Copyright (C) 2025 Athena Boose
@@ -19,6 +19,7 @@ module Expander (expand, gatherEithers, convertLeft) where
 -- Check the file `LICENSE` for a copy of the license.
 
 import Parser
+import Iohandling
 import qualified Data.Map as Map
 import Data.List
 import Data.Either
@@ -48,9 +49,9 @@ toEither :: a -> Maybe b -> Either a b
 toEither _ (Just v) = Right v
 toEither e Nothing = Left e
 
-convertLeft :: (a -> c) -> Either a b -> Either c b
-convertLeft fn (Left e) = Left (fn e)
-convertLeft fn (Right v) = Right (v)
+fmapLeft :: (a -> c) -> Either a b -> Either c b
+fmapLeft fn (Left e) = Left (fn e)
+fmapLeft fn (Right v) = Right (v)
 
 gatherEithers :: [Either [a] b] -> Either [a] [b]
 gatherEithers es = case lefts es of
@@ -93,33 +94,49 @@ concatText [e] = e
 processExpansion :: String -> MacroExpansion
 processExpansion s = (concatText) `map` (groupBy (isText) ((convert) `map` (foldr (tokenize) [] s)))
 
-parseDefArgs :: (Int, Int) -> MacroMap -> [Element] -> Either [ErrorType] (String, MacroExpansion)
+parseDefArgs :: (Int, Int) -> MacroMap -> [Element] -> IO (Either [ErrorType] (String, MacroExpansion))
 parseDefArgs (lineno, colno) mmap ((_, _, Elements name):(_, _, Elements expansion):[]) = do
         expandedName <- expandInternal mmap name
         expandedElem <- expandInternal mmap expansion
-        case expandedName of
-                (x:_) -> if (isIdStart x) && all (\c -> isIdStart c || isDigit c) expandedName
-                         then Right (expandedName, processExpansion expandedElem)
-                         else Left [(lineno, colno, "Macro name `" ++ expandedName ++ "`) contains invalid characters.")]
-                _ -> Left [(lineno, colno, "Cannot define a macro without a name.")]
+        case (expandedName, expandedElem) of
+                (Right nm@(x:_), Right el) -> if (isIdStart x) && all (\c -> isIdStart c || isDigit c) nm
+                         then return (Right (nm, processExpansion el))
+                         else return (Left [(lineno, colno, "Macro name `" ++ nm ++ "`) contains invalid characters.")])
+                (Left errs, Right _) -> return (Left ((lineno, colno, "Encountered an error when expanding macro name."):errs))
+                (Right _, Left errs) -> return (Left ((lineno, colno, "Encountered an error when expanding macro definition.j"):errs))
+                (Left nameerrs, Left deferrs) -> return (Left ((lineno, colno, "Encountered an error when expanding macro name."):nameerrs ++ (lineno, colno, "Encountered an error when expanding macro definition.j"):deferrs))
+                _ -> return (Left [(lineno, colno, "Cannot define a macro without a name.")])
 
-parseDefArgs (row, col) mmap elems = Left [(row, col, "`def` macro called with an invalid number of arguments: `def` expects 2 arguments, provided " ++ show (length elems) ++ ".")]
+parseDefArgs (row, col) mmap elems = return (Left [(row, col, "`def` macro called with an invalid number of arguments: `def` expects 2 arguments, provided " ++ show (length elems) ++ ".")])
 
-expandInternal :: MacroMap -> [Element] -> Either [ErrorType] String
+-- position -> args
+includeFile :: (Int, Int) -> [String] -> IO (Either [ErrorType] [Element])
+includeFile (lineno, colno) [name:_] = return (Left [])
+includeFile (lineno, colno) _ = return (Left [(lineno, colno, "No filename argument provided for \\include.")])
+
+expandInternal :: MacroMap -> [Element] -> IO (Either [ErrorType] String)
 expandInternal mmap ((_, _, Plaintext str):xs) = do
         result <- expandInternal mmap xs
-        Right (str ++ result)
+        return ((str ++) <$> result)
 expandInternal mmap ((_, _, Elements els):xs) = expandInternal mmap els
 expandInternal mmap ((line, col, Macro (name, args)):xs) | name == "def" = do
-        (newname, newexp) <- parseDefArgs (line, col) mmap args
-        expandInternal (Map.insert newname newexp mmap) xs
+        args <- parseDefArgs (line, col) mmap args
+        (\(newname, newexp) -> expandInternal (Map.insert newname newexp mmap) xs) `unwrapEither` args
                                                          | otherwise = do
-        expansionRules <- ((toEither [(line, col, "Macro name `" ++ name ++ "` undefined.")]) . Map.lookup name ) mmap
-        expandedArgs <- (gatherEithers . (map (\(_, _, Elements els) -> expandInternal mmap els))) args
-        result <- convertLeft (\str -> [(line, col, str)]) (expandMacro expandedArgs expansionRules)
+        expresults <- mapM (\(_, _, Elements e) -> expandInternal mmap e) args
         rest <- expandInternal mmap xs
-        return (result ++ rest)
-expandInternal _ [] = Right []
+        case (rest, Map.lookup name mmap) of
+                (Right txt, Just rules) -> (\a -> a ++ txt) <$> ((\el -> fmapLeft (\msg -> (line, col, msg)) (expandElement el rules)) =<< (gatherEithers expresults))
+                (Left errs, Nothing) -> return (Left((line, col, "Macro name `" ++ name ++ "` undefined."):errs))
+                (Left errs, _) -> return (Left(errs))
+                (_, Nothing) -> return (Left ([(line, col, "Macro name `" ++ name ++ "` undefined.")]))
+--        gatherEithers expresults >>= (\e -> fmapLeft (\msg -> (line, col, msg)) (expandElement e -- macro element here))
+--        expansionRules <- ((toEither [(line, col, "Macro name `" ++ name ++ "` undefined.")]) . Map.lookup name ) mmap
+--        expandedArgs <- (gatherEithers . (map (\(_, _, Elements els) -> expandInternal mmap els))) args
+--        result <- fmapLeft (\str -> [(line, col, str)]) (expandMacro expandedArgs expansionRules)
+--        rest <- expandInternal mmap xs
+--        return (result ++ rest)
+expandInternal _ [] = return (Right [])
 
-expand :: [Element] -> Either [ErrorType] String
-expand = expandInternal Map.empty
+expand :: [Element] -> IO (Either [ErrorType] String)
+expand el = return (Left [])--expandInternal Map.empty
