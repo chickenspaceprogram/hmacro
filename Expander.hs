@@ -76,13 +76,13 @@ isIdStart ch | isAsciiUpper ch || isAsciiLower ch = True
              | otherwise = False
 
 
-data MacroExpansionToken = Numeric Int | ArgNumeric Int | Ch Char
+data MacroExpansionToken = Numeric String | ArgNumeric Int | Ch Char
 
 tokenize :: Char -> [MacroExpansionToken] -> [MacroExpansionToken]
-tokenize ch ((Numeric num):rest) | isDigit ch = (Numeric (num * 10 + (digitToInt ch))):rest
-                                          | ch == '$' = (ArgNumeric num):rest
-                                          | otherwise = (Ch ch):((map (Ch) (show num)) ++ rest)
-tokenize ch rest | isDigit ch = (Numeric (digitToInt ch)):rest
+tokenize ch ((Numeric num):rest) | isDigit ch = (Numeric (ch:num)):rest
+                                          | ch == '$' = (ArgNumeric $ read num):rest
+                                          | otherwise = (Ch ch):((map (Ch) (num)) ++ rest)
+tokenize ch rest | isDigit ch = (Numeric [ch]):rest
 tokenize '\\' ((ArgNumeric num):rest) = (map (Ch) (show num)) ++ rest
 tokenize ch rest = (Ch ch):rest
 
