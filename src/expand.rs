@@ -60,6 +60,7 @@ fn expand_file(path: &Path, macro_map: &mut HashMap<String, Vec<MacroAst>>) -> R
 fn expand(ast: &MacroAst, macro_map: &mut HashMap<String, Vec<MacroAst>>, path: &Path) -> Result<String, ErrType> {
     match ast {
         MacroAst::Text(_, _, txt) => Ok(txt.clone()),
+        MacroAst::EscChr(_, _, '\n') => Ok(String::new()),
         MacroAst::EscChr(_, _, ch) => Ok(ch.to_string()),
         MacroAst::ArgNo(_, _, n) => Ok(n.to_string()),
         MacroAst::Macro(r, c, name, args) => {

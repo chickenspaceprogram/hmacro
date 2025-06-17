@@ -104,7 +104,7 @@ fn parse_escs<'a>(txt: &'a str) -> Option<(Token<'a>, &'a str)> {
         Some('$') => Some((Token::EscChr('$'), &txt[2..])),
         Some('{') => Some((Token::EscChr('{'), &txt[2..])),
         Some('}') => Some((Token::EscChr('}'), &txt[2..])),
-        Some('\n') => Some((Token::Text(&txt[0..0]), &txt[2..])),
+        Some('\n') => Some((Token::EscChr('\n'), &txt[2..])),
         _ => None,
     };
 }
@@ -129,6 +129,11 @@ fn add_linenos<'a>(tok: &Token<'a>, lineno: &mut usize, colno: &mut usize) -> (u
         Token::LBrack | Token::RBrack => (
             *lineno,
             *colno + 1,
+            (*lineno, *colno, tok.clone())
+        ),
+        Token::EscChr('\n') => (
+            *lineno + 1,
+            1,
             (*lineno, *colno, tok.clone())
         ),
         Token::EscChr(_) => (
@@ -162,7 +167,7 @@ fn countlines(txt: &str, lineno: usize) -> usize {
 fn countcols(txt: &str, colno: usize) -> usize {
     match txt.lines().enumerate().last() {
         Some((0, s)) => s.len() + colno,
-        Some((_, s)) => s.len(),
+        Some((_, s)) => s.len() + 1,
         _ => colno,
     }
 }
