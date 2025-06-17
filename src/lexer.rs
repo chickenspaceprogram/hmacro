@@ -2,7 +2,7 @@
 pub enum Token<'a> {
     Text(&'a str),
     MacroName(&'a str),
-    ArgNo(u64),
+    ArgNo(usize),
     Error(&'static str),
     LBrack,
     RBrack,
@@ -59,7 +59,7 @@ fn parse_macro_name<'a>(txt: &'a str) -> Option<(Token<'a>, &'a str)> {
         Some('a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-') => (),
         _ => return None,
     }
-    let index = txt[1..].find(|ch: char| ch.is_alphanumeric() || ch == '_' || ch == '-').unwrap_or(txt[1..].len());
+    let index = txt[1..].find(|ch: char| !(ch.is_alphanumeric() || ch == '_' || ch == '-')).unwrap_or(txt[1..].len()) + 1;
     return Some((Token::MacroName(&txt[1..index]), &txt[index..]))
 }
 
@@ -87,7 +87,7 @@ fn parse_dollar<'a>(txt: &'a str) -> Option<(Token<'a>, &'a str)> {
         _ => return None,
     }
     let index = txt[1..].find(|ch: char| !ch.is_digit(10)).unwrap_or(txt.len());
-    match txt[1..index].parse::<u64>() {
+    match txt[1..index].parse::<usize>() {
         Ok(v) => Some((Token::ArgNo(v), &txt[index..])),
         _ => Some((Token::EscChr('$'), &txt[1..])), 
     }
@@ -104,6 +104,7 @@ fn parse_escs<'a>(txt: &'a str) -> Option<(Token<'a>, &'a str)> {
         Some('$') => Some((Token::EscChr('$'), &txt[2..])),
         Some('{') => Some((Token::EscChr('{'), &txt[2..])),
         Some('}') => Some((Token::EscChr('}'), &txt[2..])),
+        Some('\n') => Some((Token::Text(&txt[0..0]), &txt[2..])),
         _ => None,
     };
 }
@@ -150,7 +151,7 @@ fn add_linenos<'a>(tok: &Token<'a>, lineno: &mut usize, colno: &mut usize) -> (u
     }
 }
 
-fn numdigits(num: u64) -> usize {
+fn numdigits(num: usize) -> usize {
     num.to_string().chars().count()
 }
 

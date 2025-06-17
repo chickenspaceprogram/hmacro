@@ -1,17 +1,43 @@
-use crate::process::lexer::Token;
+use crate::lexer::{Token, tokenize};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum TokenTree<'a> {
+enum TokenTree<'a> {
     Text(usize, usize, &'a str),
     EscChr(usize, usize, char),
-    ArgNo(usize, usize, u64),
+    ArgNo(usize, usize, usize),
     Macro(usize, usize, &'a str, Vec<TokenTree<'a>>), // tokentrees are probably scopes but don't inherently have to be
     Scope(usize, usize, Vec<TokenTree<'a>>),
     Error(usize, usize, &'static str),
     Nothing,
 }
 
-pub fn parse<'a, 'b>(toks: &'b [(usize, usize, Token<'a>)]) -> Vec<TokenTree<'a>> {
+#[derive(Debug, Clone, PartialEq)]
+pub enum MacroAst {
+    Text(usize, usize, String),
+    EscChr(usize, usize, char),
+    ArgNo(usize, usize, usize),
+    Macro(usize, usize, String, Vec<MacroAst>), // tokentrees are probably scopes but don't inherently have to be
+    Scope(usize, usize, Vec<MacroAst>),
+    Error(usize, usize, &'static str),
+}
+
+pub fn parse_txt(txt: &str) -> Vec<MacroAst> {
+    parse(tokenize(txt).as_ref()).iter().map(|tr| convert(tr)).collect()
+}
+
+fn convert(toktree: &TokenTree) -> MacroAst {
+    match toktree {
+        TokenTree::Text(r, c, txt) => MacroAst::Text(*r, *c, txt.to_string()),
+        TokenTree::EscChr(r, c, ch) => MacroAst::EscChr(*r, *c, *ch),
+        TokenTree::ArgNo(r, c, v) => MacroAst::ArgNo(*r, *c, *v),
+        TokenTree::Macro(r, c, nm, child) => MacroAst::Macro(*r, *c, nm.to_string(), child.iter().map(|el| convert(el)).collect()),
+        TokenTree::Scope(r, c, child) => MacroAst::Scope(*r, *c, child.iter().map(|el| convert(el)).collect()),
+        TokenTree::Error(r, c, e) => MacroAst::Error(*r, *c, e),
+        _ => panic!("found TokenTree::Nothing in parse tree"),
+    }
+}
+
+fn parse<'a, 'b>(toks: &'b [(usize, usize, Token<'a>)]) -> Vec<TokenTree<'a>> {
     let mut tokslice = toks;
     loop {
         let (mut tvec, rest) = parse_internal(tokslice);
