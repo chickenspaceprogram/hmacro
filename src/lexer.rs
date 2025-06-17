@@ -86,7 +86,7 @@ fn parse_dollar<'a>(txt: &'a str) -> Option<(Token<'a>, &'a str)> {
         Some('$') => (),
         _ => return None,
     }
-    let index = txt[1..].find(|ch: char| !ch.is_digit(10)).unwrap_or(txt.len());
+    let index = txt[1..].find(|ch: char| !ch.is_digit(10)).unwrap_or(txt.len()) + 1;
     match txt[1..index].parse::<usize>() {
         Ok(v) => Some((Token::ArgNo(v), &txt[index..])),
         _ => Some((Token::EscChr('$'), &txt[1..])), 

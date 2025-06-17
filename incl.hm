@@ -1,4 +1,2 @@
-\def{asdfghjkl}{html}\
-\include{\asdfghjkl.hm}\
-\
-\p{paragramp}
+\incldefs{html.hm}\
+\p{paragrpah}

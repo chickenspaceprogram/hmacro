@@ -10,6 +10,7 @@ static INBUILT_MACROS: LazyLock<HashMap<&str, InbuiltMacroFn>> = LazyLock::new(|
     let mut map: HashMap<&str, InbuiltMacroFn> = HashMap::new();
     map.insert("def", def_macro);
     map.insert("include", include_macro);
+    map.insert("incldefs", incldefs_macro);
     map
 });
 
@@ -43,11 +44,24 @@ fn include_macro(info: MacroInfo, macro_map: &mut HashMap<String, Vec<MacroAst>>
     expand_file(newpath.as_path(), macro_map)
 }
 
+fn incldefs_macro(info: MacroInfo, macro_map: &mut HashMap<String, Vec<MacroAst>>, path: &Path) -> Result<String, ErrType> {
+    let (row, col, args) = info;
+    if args.len() < 1 {
+        return Err((row, col, "\\incldefs macro requires at least 1 argument".to_string(), path.to_path_buf()))
+    }
+    let filename = expand(&args[0], macro_map, path)?;
+    let mut newpath = path.to_path_buf();
+    newpath.pop();
+    newpath.push(filename);
+    expand_file(newpath.as_path(), macro_map)?;
+    Ok(String::new())
+}
+
 pub fn expand_new_file(path: &Path) -> Result<String, ErrType> {
     expand_file(path, &mut HashMap::new())
 }
 
-fn expand_file(path: &Path, macro_map: &mut HashMap<String, Vec<MacroAst>>) -> Result<String, ErrType> {
+pub fn expand_file(path: &Path, macro_map: &mut HashMap<String, Vec<MacroAst>>) -> Result<String, ErrType> {
     match fs::read_to_string(path) {
         Ok(txt) => Ok(concat_all(
             parse_txt(txt.as_str()).iter()
