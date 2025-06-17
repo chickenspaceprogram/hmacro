@@ -4,4 +4,6 @@
 \def{br}{<br>}\
 \def{p}{<p>$1<p>}\
 \p{rizz}
-skibidi rizzler gyatt
+\ skibidi rizzler gyatt
+
+\cat{\p{rizz}}

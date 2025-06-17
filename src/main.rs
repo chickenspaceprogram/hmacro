@@ -30,6 +30,8 @@ fn print_help() {
     `-v', `--version' - Print a version message, then exit
     `-h', `--help'    - Print a help message, then exit
     `--license'       - Display information about hmacro's license
+    `-Dmacro=exp'     - Predefines a new macro, named `macro', that expands
+                        to `exp'.
 
     You can pass a list of filenames to hmacro.
     They will each be expanded separately and the results concatenated.

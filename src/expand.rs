@@ -11,6 +11,7 @@ static INBUILT_MACROS: LazyLock<HashMap<&str, InbuiltMacroFn>> = LazyLock::new(|
     map.insert("def", def_macro);
     map.insert("include", include_macro);
     map.insert("incldefs", incldefs_macro);
+    map.insert("cat", cat_macro);
     map
 });
 
@@ -55,6 +56,62 @@ fn incldefs_macro(info: MacroInfo, macro_map: &mut HashMap<String, Vec<MacroAst>
     newpath.push(filename);
     expand_file(newpath.as_path(), macro_map)?;
     Ok(String::new())
+}
+
+fn cat_macro(info: MacroInfo, _: &mut HashMap<String, Vec<MacroAst>>, path: &Path) -> Result<String, ErrType> {
+    let (_, _, ast) = info;
+    let mut outstr = String::new();
+    for elem in ast {
+        match elem {
+            MacroAst::Scope(_, _, els) => {
+                for i in els {
+                    match cat_recursive(i) {
+                        Ok(s) => outstr += s.as_str(),
+                        Err((r, c, e)) => return Err((r, c, e.to_string(), path.to_path_buf())),
+
+                    }
+                }
+            },
+            _ => {
+                match cat_recursive(elem) {
+                    Ok(s) => outstr += s.as_str(),
+                    Err((r, c, e)) => return Err((r, c, e.to_string(), path.to_path_buf())),
+                }
+            },
+        }
+    }
+    Ok(outstr)
+}
+
+fn cat_recursive(elem: &MacroAst) -> Result<String, (usize, usize, &'static str)> {
+    let mut outstr = String::new();
+    match elem {
+        MacroAst::Text(_, _, txt) => outstr += txt,
+        MacroAst::EscChr(_, _, ch) => {
+            outstr.push('\\');
+            outstr.push(*ch);
+        },
+        MacroAst::ArgNo(_, _, n) => {
+            outstr.push('$');
+            outstr.push_str(n.to_string().as_str());
+        },
+        MacroAst::Macro(_, _, nm, els) => {
+            outstr.push('\\');
+            outstr += nm;
+            for el in els {
+                outstr += cat_recursive(el)?.as_str();
+            }
+        }
+        MacroAst::Scope(_, _, scp) => {
+            outstr.push('{');
+            for el in scp {
+                outstr += cat_recursive(el)?.as_str();
+            }
+            outstr.push('}');
+        }
+        MacroAst::Error(r, c, e) => return Err((*r, *c, e)),
+    }
+    Ok(outstr)
 }
 
 pub fn expand_new_file(path: &Path) -> Result<String, ErrType> {

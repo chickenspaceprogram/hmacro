@@ -85,7 +85,6 @@ fn grab_tok<'a, 'b>(toks: &'b [(usize, usize, Token<'a>)]) -> (TokenTree<'a>, &'
     match toks[0] {
         (row, col, Token::Text(s)) => (TokenTree::Text(row, col, s), &tokslice[1..]),
         (row, col, Token::ArgNo(v)) => (TokenTree::ArgNo(row, col, v), &tokslice[1..]),
-        (row, col, Token::Error(e)) => (TokenTree::Error(row, col, e), &tokslice[1..]),
         (row, col, Token::EscChr(ch)) => (TokenTree::EscChr(row, col, ch), &tokslice[1..]),
         (_, _, Token::LBrack) => parse_scope(tokslice).unwrap(),
         (_, _, Token::RBrack) => (TokenTree::Nothing, tokslice),

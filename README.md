@@ -1,45 +1,31 @@
 # hmacro
 
-A kinda-terrible macro expander written in Haskell
+A kinda-terrible macro expander originally written in Haskell, but later
+rewritten in Rust.
 
 ## Build
 
-Build this by running the shell script `build.sh`. 
-The intermediate files by default get put in `build`, and the executable is located at `build/hmacro`. 
-You can then install it if you want by moving it to somewhere on your path.
+You can build this with Cargo, just run `cargo build`.
 
-To build this you must have GHC installed. 
-Your Unix distribution probably has a package. 
-I've tested this with GHC v9.12.2 at time of writing, but I may test other versions in future. 
-If you encounter errors with other GHC versions please raise an issue and I'll attempt to fix it.
-
-For now this is only supported on Unix, but it should be pretty simple to compile on Windows as well. 
-Just run GHC on `hmacro.hs` and GHC should take care of the rest. 
-Some optimization flags (`-O2`) are probably not unwise as well.
-
+You can also install it with `cargo install`.
 
 ## Invoking from the command line
 ~~~
 Usage:
 
-hmacro [OPTIONS] <filename> [-o OUTFILE]
+hmacro [OPTIONS] <filename>
 
-`-v`, `--version` - Print a version message, then exit
-`--help`          - Print a help message, then exit
-`-o`, `--output`  - Specify a filename to output to (default: write to stdout)
-`--license`       - Display information about hmacro's license
+`-v', `--version' - Print a version message, then exit
+`-h', `--help'    - Print a help message, then exit
+`--license'       - Display information about hmacro's license
+`-Dmacro=exp'     - Predefines a new macro, named `macro', that expands
+                    to `exp'.
 
 You can pass a list of filenames to hmacro.
 They will each be expanded separately and the results concatenated.
 ~~~
 
 ## Example CLI invocations
-
-~~~
-hmacro foo.hm bar.hm -o baz.txt
-~~~
-
-Expands `foo.hm` as well as `bar.hm`, then concatenates the results together and outputs them to baz.txt.
 
 ~~~
 hmacro foo.hm
@@ -60,8 +46,6 @@ textelem ::= macro | scope | /[^\\]/ | "\\" | "\{" | "\}"
 macro ::= '\' name { scope } | def | include
 name ::= /[a-zA-Z\-_][a-zA-Z0-9\-_]*/
 scope ::= '{' text '}'
-def ::= '\def' scope scope
-include ::= '\include' scope
 ~~~
 
 Practically, `hmacro` source consists of macros and scopes. 
@@ -73,16 +57,26 @@ A macro looks something like `\name`, where name is a name that must start with 
 The `\` character can be escaped with `\\`.
 If a macro is immediately followed by one or more scopes, those scopes are considered arguments to that macro and are available to it when it expands.
 
-New macros can be defined using the `\def` macro. 
-This macro takes two arguments; the first is the macro's name, and the second is a macro definition. 
-Macro definitions are themselves expanded the same way as normal macro arguments; however, after they are expanded, `hmacro` will search the definition for argument-identifiers, which are denoted by the character `$` immediately followed by ASCII numeric characters. 
-The base-10 number following `$` refers to the specific argument the argument-identifier will be replaced with, so `$0` is the first argument, `$1` is the second, and so on.
-Argument-identifiers can be escaped with `\`, so `\$` will just expand to `$`.
-If the `$` is not followed by numeric characters it is unnecessary to do this, though, since `$` only signifies an argument-identifier when immediately followed by numeric characters.
 
-Files with predefined macros can be included into other files with the `\include` macro. 
-This macro takes one argument, the filename of the file you wish to include.
-As with all macros, the filename can be composed of whatever macro nonsense you want, it's all expanded prior to inclusion.
-Due to a lack of planning when designing this application, files may only be included once.
-If you need to include some actual text, it's probably best to define a macro within a file that expands to the desired text.
-Although, include will include any non-macro text as expected.
+Some macros are predefined as follows:
+
+- `\def{name}{expansion}`
+Defines a new macro called `name` that expands to `expansion`.
+`expansion` consists of text interspersed with macro arguments.
+A macro argument is of form `$num`, where `num` is the number of
+the argument.
+`$1` is the first argument, `$2` is the second, and so on.
+If a `$` character is followed by a numeric character, and you do not want
+either to be treated as specifying an argument, escape the `$` with `\$123`.
+- `\include{filename}`
+Expands to the text of `filename`.
+The file itself will be processed for hmacro scopes and macros.
+Any macros that are not within a scope will be defined.
+Recursive includes are not allowed.
+- `\incldefs{filename}`
+Expands to nothing, but any macros in the file `filename` that are outside of
+a scope will be defined after this macro is called.
+- `\cat{arg1}{arg2}...{argn}`
+Concatenates all arguments provided without expanding any of them.
+
+

@@ -3,7 +3,6 @@ pub enum Token<'a> {
     Text(&'a str),
     MacroName(&'a str),
     ArgNo(usize),
-    Error(&'static str),
     LBrack,
     RBrack,
     EscChr(char),
@@ -41,8 +40,11 @@ pub fn tokenize<'a>(txt: &'a str) -> Vec<(usize, usize, Token<'a>)> {
             tok_txt = rest;
             continue;
         }
-        out_vec.push(Token::Error("Tokenization error: No valid token found."));
-        break;
+        let mut it = tok_txt.char_indices();
+        it.next();
+        let (i, _) = it.next().unwrap_or((tok_txt.len(), 'a'));
+        out_vec.push(Token::Text(&tok_txt[0..i]));
+        tok_txt = &tok_txt[i..];
     }
     let mut lineno: usize = 1;
     let mut colno: usize = 1;
@@ -139,11 +141,6 @@ fn add_linenos<'a>(tok: &Token<'a>, lineno: &mut usize, colno: &mut usize) -> (u
         Token::EscChr(_) => (
             *lineno,
             *colno + 2,
-            (*lineno, *colno, tok.clone())
-        ),
-        Token::Error(_) => (
-            *lineno,
-            *colno,
             (*lineno, *colno, tok.clone())
         ),
     };
