@@ -161,6 +161,9 @@ fn expand_macro(expansion: &[MacroAst], args: &[MacroAst], macro_map: &mut HashM
                 if args.len() < *n {
                     return Err((*r, *c, "Macro lacks argument `".to_string() + n.to_string().as_str() + "\'", path.to_path_buf()));
                 }
+                if *n == 0 {
+                    return Err((*r, *c, "Macro cannot have argument $0".to_string(), path.to_path_buf()));
+                }
                 else {
                     outstr.extend(expand(&args[n - 1], macro_map, path)?.chars());
                 }
