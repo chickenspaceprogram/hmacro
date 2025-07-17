@@ -1,171 +1,116 @@
 #[derive(Debug, Clone)]
-pub enum Token<'a> {
+pub enum TokenVal<'a> {
     Text(&'a str),
-    MacroName(&'a str),
-    ArgNo(usize),
+    Macro(&'a str),
+    Arg(usize),
     LBrack,
     RBrack,
-    EscChr(char),
+    EscChr(u8),
+    Error(&'static str),
 }
 
-pub fn tokenize<'a>(txt: &'a str) -> Vec<(usize, usize, Token<'a>)> {
-    let mut tok_txt: &'a str = txt;
-    let mut out_vec: Vec<Token> = Vec::new();
-    loop {
-        if tok_txt.len() == 0 {
-            break;
-        }
-        if let Some((tok, rest)) = parse_text(tok_txt) {
-            out_vec.push(tok);
-            tok_txt = rest;
-            continue;
-        }
-        if let Some((tok, rest)) = parse_macro_name(tok_txt) {
-            out_vec.push(tok);
-            tok_txt = rest;
-            continue;
-        }
-        if let Some((tok, rest)) = parse_brackets(tok_txt) {
-            out_vec.push(tok);
-            tok_txt = rest;
-            continue;
-        }
-        if let Some((tok, rest)) = parse_dollar(tok_txt) {
-            out_vec.push(tok);
-            tok_txt = rest;
-            continue;
-        }
-        if let Some((tok, rest)) = parse_escs(tok_txt) {
-            out_vec.push(tok);
-            tok_txt = rest;
-            continue;
-        }
-        let mut it = tok_txt.char_indices();
-        it.next();
-        let (i, _) = it.next().unwrap_or((tok_txt.len(), 'a'));
-        out_vec.push(Token::Text(&tok_txt[0..i]));
-        tok_txt = &tok_txt[i..];
-    }
-    let mut lineno: usize = 1;
-    let mut colno: usize = 1;
-    return out_vec.iter().map(|tok| add_linenos(tok, &mut lineno, &mut colno)).collect();
+#[derive(Debug, Copy, Clone)] // justifyable, this is small
+pub struct Location {
+    row: usize,
+    col: usize,
 }
 
-fn parse_macro_name<'a>(txt: &'a str) -> Option<(Token<'a>, &'a str)> {
-    let mut iter = txt.chars();
-    match iter.next() {
-        Some('\\') => (),
-        _ => return None,
-    }
-    match iter.next() {
-        Some('a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-') => (),
-        _ => return None,
-    }
-    let index = txt[1..].find(|ch: char| !(ch.is_alphanumeric() || ch == '_' || ch == '-')).unwrap_or(txt[1..].len()) + 1;
-    return Some((Token::MacroName(&txt[1..index]), &txt[index..]))
+#[derive(Debug, Clone)]
+pub struct Token<'a> {
+    pub tok: TokenVal<'a>,
+    pub loc: Location,
 }
 
-fn parse_text<'a>(txt: &'a str) -> Option<(Token<'a>, &'a str)> {
-    let index = txt.find(|ch| ch == '$' || ch == '\\' || ch == '{' || ch == '}')
-                   .unwrap_or(txt.len());
-    if index == 0 {
+const IMPORTANT_CHARS: [char; 4] = ['\\', '{', '}', '$'];
+
+fn count_newlines(txt: &str) -> usize {
+    txt.chars().filter(|ch| *ch == '\n').count()
+}
+
+pub fn pop_tok<'a>(txt: &mut &'a str, loc: &mut Location) -> Option<Token<'a>> {
+    if txt.len() == 0 {
         return None;
     }
-    return Some((Token::Text(&txt[..index]), &txt[index..]));
-}
-
-fn parse_brackets<'a>(txt: &'a str) -> Option<(Token<'a>, &'a str)> {
-    match txt.chars().next() {
-        Some('{') => Some((Token::LBrack, &txt[1..])),
-        Some('}') => Some((Token::RBrack, &txt[1..])),
-        _ => None,
-    }
-}
-
-fn parse_dollar<'a>(txt: &'a str) -> Option<(Token<'a>, &'a str)> {
-    let mut iter = txt.chars();
-    match iter.next() {
-        Some('$') => (),
-        _ => return None,
-    }
-    let index = txt[1..].find(|ch: char| !ch.is_digit(10)).unwrap_or(txt.len()) + 1;
-    match txt[1..index].parse::<usize>() {
-        Ok(v) => Some((Token::ArgNo(v), &txt[index..])),
-        _ => Some((Token::EscChr('$'), &txt[1..])), 
-    }
-}
-
-fn parse_escs<'a>(txt: &'a str) -> Option<(Token<'a>, &'a str)> {
-    let mut iter = txt.chars();
-    match iter.next() {
-        Some('\\') => (),
-        _ => return None,
-    }
-    return match iter.next() {
-        Some('\\') => Some((Token::EscChr('\\'), &txt[2..])),
-        Some('$') => Some((Token::EscChr('$'), &txt[2..])),
-        Some('{') => Some((Token::EscChr('{'), &txt[2..])),
-        Some('}') => Some((Token::EscChr('}'), &txt[2..])),
-        Some('\n') => Some((Token::EscChr('\n'), &txt[2..])),
-        _ => None,
-    };
-}
-
-fn add_linenos<'a>(tok: &Token<'a>, lineno: &mut usize, colno: &mut usize) -> (usize, usize, Token<'a>) {
-    let res = match tok {
-        Token::Text(s) => (
-            countlines(s, *lineno),
-            countcols(s, *colno),
-            (*lineno, *colno, tok.clone()) // inexpensive as token stores a bunch of references
-        ),
-        Token::MacroName(s) => (
-            countlines(s, *lineno),
-            1 + countcols(s, *colno),
-            (*lineno, *colno, tok.clone())
-        ),
-        Token::ArgNo(v) => (
-            *lineno,
-            *colno + 1 + numdigits(*v),
-            (*lineno, *colno, tok.clone())
-        ),
-        Token::LBrack | Token::RBrack => (
-            *lineno,
-            *colno + 1,
-            (*lineno, *colno, tok.clone())
-        ),
-        Token::EscChr('\n') => (
-            *lineno + 1,
-            1,
-            (*lineno, *colno, tok.clone())
-        ),
-        Token::EscChr(_) => (
-            *lineno,
-            *colno + 2,
-            (*lineno, *colno, tok.clone())
-        ),
-    };
-    match res {
-        (ln, col, tuple) => {
-            *lineno = ln;
-            *colno = col;
-            return tuple;
+    if let Some(len) = txt.find(IMPORTANT_CHARS) {
+        if len != 0 {
+            let result = Token{tok: TokenVal::Text(&txt[..len]), loc: *loc};
+            *txt = &txt[len..];
+            let nls = count_newlines(&txt[..len]);
+            loc.row += nls;
+            if nls == 0 {
+                loc.col += len;
+            }
+            else {
+                loc.col = len - txt[..len].rfind('\n').unwrap()
+            }
+            return Some(result);
+        }
+        if txt.as_bytes()[0] == b'{' {
+            *txt = &txt[1..];
+            let res = Token {tok: TokenVal::LBrack, loc: *loc};
+            loc.col += 1;
+            return Some(res);
+        }
+        if txt.as_bytes()[0] == b'}' {
+            *txt = &txt[1..];
+            let res = Token {tok: TokenVal::RBrack, loc: *loc};
+            loc.col += 1;
+            return Some(res);
+        }
+        if txt.len() == 1 {
+            let tokstr;
+            if txt.as_bytes()[1] == b'$' {
+                tokstr = "Argument specifier `$' found before end of file";
+            }
+            else {
+                tokstr = "Macro specifier `\\' found before end of file";
+            }
+            let tok = Token {tok: TokenVal::Error(tokstr), loc: *loc};
+            loc.col += 1;
+            *txt = &txt[1..];
+            return Some(tok);
+        }
+        if txt.as_bytes()[1] == b'$' {
+            if let Some(res) = txt[1..].find(|c: char| !c.is_ascii_digit()) {
+                let retval = Token {tok: TokenVal::Arg(txt[1..res + 1].parse().unwrap()), loc: *loc};
+                loc.col += res + 1;
+                *txt = &txt[res + 1..];
+                return Some(retval);
+            }
+            let tmp = Token {tok: TokenVal::Arg(txt[1..].parse().unwrap()), loc: *loc};
+            loc.col += txt.len() - 1;
+            *txt = &txt[txt.len()..];
+            return Some(tmp);
+        }
+        if txt.as_bytes()[2] == b'\\' ||
+            txt.as_bytes()[2] == b'\n' ||
+            txt.as_bytes()[2] == b'$' ||
+            txt.as_bytes()[2] == b'{' ||
+            txt.as_bytes()[2] == b'}' {
+            let retval = Token {tok: TokenVal::EscChr(txt.as_bytes()[2]), loc: *loc};
+            loc.col += 2;
+            *txt = &txt[2..];
+            return Some(retval);
+        }
+        // know first char is '\\'
+        if let Some(res) = txt[1..].find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_')) {
+            let retval = Token {tok: TokenVal::Macro(&txt[1..res + 1]), loc: *loc};
+            loc.col += res + 1;
+            *txt = &txt[res + 1..];
+            return Some(retval);
+        }
+        else {
+            let retval = Token {tok: TokenVal::Macro(&txt[1..]), loc: *loc};
+            loc.col += txt.len() + 1;
+            *txt = &txt[txt.len() + 1..];
+            return Some(retval);
         }
     }
-}
-
-fn numdigits(num: usize) -> usize {
-    num.to_string().chars().count()
-}
-
-fn countlines(txt: &str, lineno: usize) -> usize {
-    lineno + txt.chars().filter(|c| *c == '\n').count()
-}
-
-fn countcols(txt: &str, colno: usize) -> usize {
-    match txt.lines().enumerate().last() {
-        Some((0, s)) => s.len() + colno,
-        Some((_, s)) => s.len() + 1,
-        _ => colno,
+    else {
+        let result = Token {tok: TokenVal::Text(txt), loc: *loc};
+        loc.col += txt.len();
+        *txt = &txt[txt.len()..]; // empty slice, next call will fail
+        return Some(result);
     }
 }
 

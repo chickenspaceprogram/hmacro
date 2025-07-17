@@ -1,19 +1,11 @@
 use std::env;
-use std::path::PathBuf;
 use std::process::ExitCode;
-use std::collections::HashMap;
 mod lexer;
-mod parser;
-pub mod expand;
 
-fn print_err(e: &expand::ErrType) {
-    let (row, col, msg, path) = e;
-    eprintln!("\x1b[1m{}:{}:{}:\x1b[31m error:\x1b[22;39m {}.", path.display(), row, col, msg);
-}
 
 fn print_version() {
     println!("
-    hmacro v2.2.1, Copyright (C) 2025 Athena Boose
+    hmacro v3.0.0, Copyright (C) 2025 Athena Boose
 
     This program comes with ABSOLUTELY NO WARRANTY.
     This is free software, and you are welcome to redistribute it
@@ -57,8 +49,12 @@ fn print_license() {
     ");
 }
 
+struct CompileInfo {
+    files: Vec<String>,
+    defines: Vec<(String, String)>
+}
 enum ArgsInfo {
-    Compile(Vec<String>, HashMap<String, Vec<parser::MacroAst>>), // fnames, defines
+    Compile(),
     Help,
     Version,
     License,
@@ -82,19 +78,7 @@ fn get_args_info() -> Result<ArgsInfo, &'static str> {
     }
     let mut it = env::args();
     it.next();
-    let macros: HashMap<String, Vec<parser::MacroAst>> = 
-        it.filter(|el| el.chars().count() >= 2 && el.chars().nth(0).unwrap() == '-' && el.chars().nth(1).unwrap() == 'D')
-          .map(|el| parse_define(el.as_str()))
-          .collect::<Result<Vec<(String, String)>, _>>()?
-          .iter()
-          .map(|(nm, exp)| (nm.to_string(), Vec::from([parser::MacroAst::Text(0, 0, exp.to_string())])))
-          .collect();
-    let mut it = env::args();
-    it.next();
-    let files: Vec<String> = 
-        it.filter(|el| el.chars().count() < 2 || el.chars().nth(0).unwrap() != '-' || el.chars().nth(1).unwrap() != 'D')
-          .collect();
-    return Ok(ArgsInfo::Compile(files, macros));
+    todo!();
 }
 
 fn parse_define(arg: &str) -> Result<(String, String), &'static str> {
@@ -122,21 +106,10 @@ fn main() -> ExitCode {
             print_license();
             return ExitCode::SUCCESS;
         },
-        Ok(ArgsInfo::Compile(files, macros)) => {
-            for file in files {
-                match expand::expand_file(PathBuf::from(file).as_path(), &mut macros.clone()) {
-                    Ok(txt) => print!("{}", txt),
-                    Err(e) => {
-                        print_err(&e);
-                        return ExitCode::FAILURE;
-                    },
-                }
-            }
-            return ExitCode::SUCCESS;
-        },
         Err(e) => {
             println!("Fatal error while parsing CLI args: {}", e);
             return ExitCode::FAILURE;
         },
+        _ => todo!(),
     }
 }
