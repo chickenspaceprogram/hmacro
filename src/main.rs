@@ -1,6 +1,7 @@
 use std::env;
 use std::process::ExitCode;
-mod lexer;
+pub mod lexer;
+pub mod parser;
 
 
 fn print_version() {

@@ -1,8 +1,8 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum TokenVal<'a> {
     Text(&'a str),
     Macro(&'a str),
-    Arg(usize),
+    Arg(&'a str),
     LBrack,
     RBrack,
     EscChr(u8),
@@ -15,7 +15,7 @@ pub struct Location {
     col: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Token<'a> {
     pub tok: TokenVal<'a>,
     pub loc: Location,
@@ -72,12 +72,12 @@ pub fn pop_tok<'a>(txt: &mut &'a str, loc: &mut Location) -> Option<Token<'a>> {
         }
         if txt.as_bytes()[1] == b'$' {
             if let Some(res) = txt[1..].find(|c: char| !c.is_ascii_digit()) {
-                let retval = Token {tok: TokenVal::Arg(txt[1..res + 1].parse().unwrap()), loc: *loc};
+                let retval = Token {tok: TokenVal::Arg(&txt[..res + 1]), loc: *loc};
                 loc.col += res + 1;
                 *txt = &txt[res + 1..];
                 return Some(retval);
             }
-            let tmp = Token {tok: TokenVal::Arg(txt[1..].parse().unwrap()), loc: *loc};
+            let tmp = Token {tok: TokenVal::Arg(txt), loc: *loc};
             loc.col += txt.len() - 1;
             *txt = &txt[txt.len()..];
             return Some(tmp);
