@@ -2,10 +2,42 @@ use crate::stackbuf::{Token, StackBuf};
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+fn count_newlines(s: &str) -> usize {
+    return s.chars().filter(|c| *c == '\n').count();
+}
+fn count_chrs_after_newline(s: &str) -> usize {
+    if let Some(num) = s.rfind('\n') {
+        return s.len() - num;
+    }
+    else {
+        return s.len();
+    }
+}
+
+
 #[derive(Clone, Copy, Debug)]
 pub struct Location {
     pub row: usize,
     pub col: usize,
+}
+
+impl Location {
+    fn increment(&mut self, s: &str) {
+        let nls = count_newlines(s);
+        self.row += nls;
+        if nls == 0 {
+            self.col += s.len();
+        }
+        else {
+            self.col = 1 + count_chrs_after_newline(s);
+        }
+    }
+    fn new() -> Self {
+        Location {
+            row: 1,
+            col: 1,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -17,7 +49,7 @@ pub struct Error {
 
 
 #[derive(Clone, Debug)]
-enum MacroDefElem {
+pub enum MacroDefElem {
     Txt(String),
     ArgNo(usize),
 }
@@ -49,11 +81,11 @@ struct FileIncluder {
 
 const IMPORTANT_CHARS: &'static str = "\\$";
 
-type MacroMap = HashMap<String, Vec<MacroDefElem>>;
+pub type MacroMap = HashMap<String, Vec<MacroDefElem>>;
 
 type InbuiltMacro = fn (&Macro, &mut MacroMap, &mut FileIncluder) -> Result<String, Vec<String>>;
 
-fn is_macro_name(txt: &str) -> bool {
+pub fn is_macro_name(txt: &str) -> bool {
     if txt.len() == 0 {
         return false;
     }
@@ -67,7 +99,7 @@ fn is_macro_name(txt: &str) -> bool {
     return false;
 }
 
-fn parse_def_arg(mut txt: &str) -> Result<Vec<MacroDefElem>, Vec<String>> {
+pub fn parse_def_arg(mut txt: &str) -> Result<Vec<MacroDefElem>, Vec<String>> {
     let mut outbuf = Vec::new();
     let mut errvec = Vec::new();
     while txt.len() > 0 {
@@ -110,6 +142,7 @@ fn parse_def_arg(mut txt: &str) -> Result<Vec<MacroDefElem>, Vec<String>> {
 
 
 fn expand_def(mac: &Macro, map: &mut MacroMap, _: &mut FileIncluder) -> Result<String, Vec<String>> {
+    eprintln!("mac: {:?}, map: {:?}", mac, map);
     let macname = match &mac.args[0] {
         MacroArg::Macro(nm) => nm.to_string(),
         MacroArg::Scope(scp) => "\\".to_string() + scp,
@@ -167,6 +200,29 @@ fn expand_macro(mac: &Macro, macro_map: &mut MacroMap, file_inc: &mut FileInclud
     return Err(evec);
 }
 
+pub fn eprint_errors(es: &[Error], filname: &str) {
+    eprintln!("{} errors:", es.len());
+    for e in es {
+        eprintln!("{}:{}:{}: error: {}", filname, e.loc.row, e.loc.col, e.msg);
+    }
+}
+
+pub fn parse(txt: &str, macros: &mut MacroMap) -> Result<String, Vec<Error>> {
+    let mut buf = StackBuf::from_str(txt.to_string());
+    let retval = parse_internal(&mut buf, &mut Location::new(), macros)?;
+    if !buf.empty() {
+        let mut evec = Vec::new();
+        let mut loc = Location::new();
+        loc.increment(txt);
+        evec.push(Error {
+            msg: "Stray \\end detected".to_string(),
+            loc: loc,
+        });
+        return Err(evec);
+    }
+    return Ok(retval);
+}
+
 // escape chars will still be escaped after this!
 fn parse_internal(
     buf: &mut StackBuf,
@@ -177,16 +233,16 @@ fn parse_internal(
     let mut out = String::new();
     let mut in_macro = false;
     let mut expand_macro = false;
+        println!("{:?}", buf);
 
-    while let Some(tok) = buf.pop_tok(!in_macro) {
+    while let Some(tok) = buf.pop_tok(in_macro) {
+        println!("{:?}", buf);
         let old_loc = *loc;
         match tok {
             Token::Scope(scp) => {
-                scp.inc_loc(loc);
+                loc.increment(scp.as_str());
                 assert!(in_macro, "Internal parser error: can only parse scopes after macros!");
-                let mut st = String::new();
-                scp.append_to_str(&mut st);
-                current_macro.args.push(MacroArg::Scope(st));
+                current_macro.args.push(MacroArg::Scope(scp));
             },
             Token::Macro(name) => {
                 loc.col += name.len();
@@ -222,8 +278,8 @@ fn parse_internal(
                     in_macro = false; // macro has ended
                     expand_macro = true; // need to expand it
                 }
-                txtbuf.inc_loc(loc);
-                txtbuf.append_to_str(&mut out);
+                loc.increment(txtbuf.as_str());
+                out += txtbuf.as_str();
             },
             Token::EscChr(ch) => {
                 if in_macro {
@@ -262,6 +318,6 @@ fn parse_internal(
             },
         }
     }
-    todo!();
+    return Ok(out);
 }
 

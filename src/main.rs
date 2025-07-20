@@ -1,7 +1,9 @@
 use std::env;
 use std::process::ExitCode;
-pub mod stackbuf;
-pub mod parser;
+use std::fs;
+use std::collections::HashMap;
+mod stackbuf;
+mod parser;
 
 
 fn print_version() {
@@ -52,16 +54,26 @@ fn print_license() {
 
 struct CompileInfo {
     files: Vec<String>,
-    defines: Vec<(String, String)>
+    defines: Vec<(String, Vec<parser::MacroDefElem>)>
 }
+
+impl CompileInfo {
+    fn new() -> Self {
+        CompileInfo {
+            files: Vec::new(),
+            defines: Vec::new(),
+        }
+    }
+}
+
 enum ArgsInfo {
-    Compile(),
+    Compile(CompileInfo),
     Help,
     Version,
     License,
 }
 
-fn get_args_info() -> Result<ArgsInfo, &'static str> {
+fn get_args_info() -> Result<ArgsInfo, Vec<String>> {
     let mut it = env::args();
     it.next();
     if let Some(_) = it.find(|item| item == "--help" || item == "-h") {
@@ -79,18 +91,29 @@ fn get_args_info() -> Result<ArgsInfo, &'static str> {
     }
     let mut it = env::args();
     it.next();
-    todo!();
+    let mut compinfo = CompileInfo::new();
+    for arg in it {
+        let mut iter = arg.chars();
+        match (iter.next(), iter.next()) {
+            (Some('-'), Some('D')) => compinfo.defines.push(parse_define(&arg[2..])?),
+            _ => compinfo.files.push(arg),
+        }
+    }
+    return Ok(ArgsInfo::Compile(compinfo));
 }
 
-fn parse_define(arg: &str) -> Result<(String, String), &'static str> {
-    let v: Vec<&str> = arg[2..].splitn(2, '=').collect();
-    if v.len() < 2 {
-        return Err("Invalid macro predefinition");
+fn parse_define(arg: &str) -> Result<(String, Vec<parser::MacroDefElem>), Vec<String>> {
+    if let Some((nm, exp)) = arg.split_once('=') {
+        if parser::is_macro_name(nm) {
+            return Ok((nm.to_string(), parser::parse_def_arg(exp)?));
+        }
     }
-    if v[0].contains(|ch: char| !(ch.is_alphanumeric() || ch == '-' || ch == '_')) {
-        return Err("Predefined macro name contains invalid characters");
+    else if parser::is_macro_name(arg) {
+        return Ok((arg.to_string(), Vec::new()));
     }
-    return Ok((v[0].to_string(), v[1].to_string()));
+    let mut e = Vec::new();
+    e.push("Invalid macro name in macro predefinition".to_string());
+    return Err(e);
 }
 
 fn main() -> ExitCode {
@@ -107,10 +130,34 @@ fn main() -> ExitCode {
             print_license();
             return ExitCode::SUCCESS;
         },
+        Ok(ArgsInfo::Compile(comp)) => {
+            let mut macmap = HashMap::new();
+            for (nm, exp) in &comp.defines {
+                macmap.insert(nm.clone(), exp.clone());
+            }
+            for elem in &comp.files {
+                match fs::read_to_string(elem) {
+                    Ok(filtxt) => {
+                        let mut mmap = macmap.clone();
+                        match parser::parse(filtxt.as_str(), &mut mmap) {
+                            Ok(txt) => print!("{}", txt),
+                            Err(es) => parser::eprint_errors(es.as_slice(), elem.as_str()),
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("Fatal error while reading file: {}", e);
+                        return ExitCode::FAILURE;
+                    }
+                }
+            }
+            return ExitCode::SUCCESS;
+        }
         Err(e) => {
-            println!("Fatal error while parsing CLI args: {}", e);
+            eprintln!("Fatal errors while parsing command arguments:");
+            for elem in e {
+                eprintln!("{}", elem);
+            }
             return ExitCode::FAILURE;
         },
-        _ => todo!(),
     }
 }
