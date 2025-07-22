@@ -7,6 +7,12 @@
 
 # you must have a POSIX-compliant shell (like Bash) and the program xxd to run this
 
-# this only exists because #embed is brand new, this is portable
+# this only exists because #embed is brand new and the stupid way is portable
 
-{ xxd -i prelude.hm | tail -n +2 | head -n -2 | head -c -1; echo ', 0x00'; } > prelude.xxd.hm
+if [ -z $1 ]; then
+	echo 'Must supply first argument!' 1>&2
+	exit
+fi
+
+xxd -i $1 | tail -n +2 | head -n -2 | head -c -1
+echo ', 0x00'

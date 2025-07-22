@@ -8,11 +8,6 @@
 
 namespace {
 
-
-constexpr const char PRELUDE[] = {
-#include "prelude.xxd.hm"
-};
-
 struct MacroCtx {
 	ArgStack &argstack;
 	MacroMap &map;
