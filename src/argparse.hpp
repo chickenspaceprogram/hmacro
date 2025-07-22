@@ -1,121 +1,236 @@
 #pragma once
 
-#include <optional>
 #include <string>
-#include <cstdint>
 #include <cassert>
-#include <span>
 #include <vector>
+#include <optional>
 #include <algorithm>
+#include <expected>
 
-namespace arg_parser {
-// i might reuse this in other projects, idk
-
-struct LongOpt {
-	enum Arg : uint8_t {
+struct Flag {
+	enum ArgState {
 		NoArg,
-		OptionalArg,
-		RequiredArg,
+		OptArg,
+		ReqArg,
 	};
-	explicit LongOpt(char shortname) 
-		: name(std::nullopt), arg(NoArg), short_arg(shortname) {}
-	static LongOpt no_arg(std::string_view name) {
-		assert(name.find_first_of('=') == std::string::npos);
-		return LongOpt(std::string(name), NoArg, std::nullopt);
+	Flag(ArgState state, char shortname) :
+		shortname(shortname), 
+		longname(std::nullopt), 
+		has_arg(state) {}
+	Flag(ArgState state, std::string_view longname) : 
+		shortname(std::nullopt),
+		longname(longname), 
+		has_arg(state) {}
+	Flag(ArgState state, char shortname, std::string_view longname) : 
+		shortname(shortname),
+		longname(longname), 
+		has_arg(state) {}
+	bool operator==(char shortnm) const {
+		return shortname == shortnm;
 	}
-	static LongOpt no_arg(std::string_view name, char shortname) {
-		assert(shortname != '-');
-		assert(name.find_first_of('=') == std::string::npos);
-		return LongOpt(std::string(name), NoArg, shortname);
+	bool operator==(std::string_view str) const {
+		return longname == str;
 	}
-	static LongOpt opt_arg(std::string_view name) {
-		assert(name.find_first_of('=') == std::string::npos);
-		return LongOpt(std::string(name), OptionalArg, std::nullopt);
+	bool operator==(const std::string &str) const {
+		return *this == std::string_view(str);
 	}
-	static LongOpt opt_arg(std::string_view name, char shortname) {
-		assert(shortname != '-');
-		assert(name.find_first_of('=') == std::string::npos);
-		return LongOpt(std::string(name), OptionalArg, shortname);
+	bool operator==(const char *str) const {
+		return *this == std::string_view(str);
 	}
-	static LongOpt req_arg(std::string_view name) {
-		assert(name.find_first_of('=') == std::string::npos);
-		return LongOpt(std::string(name), RequiredArg, std::nullopt);
+	bool operator==(const Flag &flag) const {
+		return shortname == flag.shortname && longname == flag.longname;
 	}
-	static LongOpt req_arg(std::string_view name, char shortname) {
-		assert(shortname != '-');
-		assert(name.find_first_of('=') == std::string::npos);
-		return LongOpt (std::string(name), RequiredArg, std::optional(shortname));
-	}
-
-	bool operator==(const LongOpt &lopt) const {
-		if (name.has_value() != lopt.name.has_value()) {
-			return false;
-		}
-		if (short_arg.has_value() != lopt.short_arg.has_value()) {
-			return false;
-		}
-		if (arg != lopt.arg) {
-			return false;
-		}
-		if (name.has_value() && name.value() != lopt.name.value()) {
-			return false;
-		}
-		if (short_arg.has_value() && short_arg.value() != lopt.short_arg.value()) {
-			return false;
-		}
-		return true;
-	}
-	bool operator==(char ch) const {
-		if (!short_arg.has_value()) {
-			return false;
-		}
-		return ch == short_arg.value();
-	}
-	bool operator==(std::string_view txt) const {
-		if (!name.has_value()) {
-			return false;
-		}
-		return name.value() == txt;
-	}
-
-	Arg have_arg() const { return arg; }
-
-	private:
-	LongOpt(
-		std::optional<std::string> name, 
-		Arg arg,
-		std::optional<char> short_arg
-	) : name(std::move(name)), arg(arg), short_arg(short_arg) {}
-
-	std::optional<std::string> name;
-	Arg arg;
-	std::optional<char> short_arg;
+	std::optional<char> shortname;
+	std::optional<std::string_view> longname;
+	ArgState has_arg;
 };
 
-class ArgParser {
+class ArgMap {
 	public:
-	ArgParser() = delete;
-	ArgParser(int argc, const char **argv, std::string_view shortopts) : argc(argc), argv(argv) {
-		std::transform(
-			shortopts.begin(), shortopts.end(), 
-			std::back_inserter(longopts), 
-			[](char ch){ return LongOpt(ch); }
-		);
+	using ArgsType = std::vector<
+		std::pair<Flag, std::optional<std::string_view>>
+	>;
+	ArgMap() = delete;
+	explicit ArgMap(ArgsType &&args) : args(std::move(args)) {}
+	bool have_flag(char shortname) {
+		for (const auto &[flag, _] : args) {
+			if (flag == shortname) {
+				return true;
+			}
+		}
+		return false;
 	}
-	ArgParser(int argc, const char **argv, std::span<LongOpt> lopts) : argc(argc), argv(argv) {
-		std::copy(
-			lopts.begin(), lopts.end(),
-			std::back_inserter(longopts)
-		);
+	bool have_flag(std::string_view longname) {
+		for (const auto &[flag, _] : args) {
+			if (flag == longname) {
+				return true;
+			}
+		}
+		return false;
+	}
+	std::optional<std::string_view> get_arg(char shortname) {
+		for (const auto &[flag, str] : args) {
+			if (flag == shortname) {
+				return str;
+			}
+		}
+		return std::nullopt;
+	}
+	std::optional<std::string_view> get_arg(std::string_view longname) {
+		for (const auto &[flag, str] : args) {
+			if (flag == longname) {
+				return str;
+			}
+		}
+		return std::nullopt;
 	}
 	private:
-	ArgParser(int argc, const char **argv, std::vector<LongOpt> &&longopts)
-		: argc(argc), argv(argv), longopts(std::move(longopts)) {}
-	int argc;
-	const char **argv;
-	std::vector<LongOpt> longopts;
+	ArgsType args;
 };
 
+class ArgSchema {
+	public:
+	void add_flag(char shortname) {
+		assert(find_flag(shortname) == nullptr);
+		flags.push_back(Flag(Flag::NoArg, shortname));
+	}
+	void add_flag(std::string_view longname) {
+		assert(find_flag(longname) == nullptr);
+		flags.push_back(Flag(Flag::NoArg, longname));
+	}
+	void add_flag(char shortname, std::string_view longname) {
+		assert(find_flag(shortname) == nullptr);
+		assert(find_flag(longname) == nullptr);
+		flags.push_back(Flag(Flag::NoArg, shortname, longname));
+	}
 
-}
+	void add_opt_arg(char shortname) {
+		assert(find_flag(shortname) == nullptr);
+		flags.push_back(Flag(Flag::OptArg, shortname));
+	}
+	void add_opt_arg(std::string_view longname) {
+		assert(find_flag(longname) == nullptr);
+		flags.push_back(Flag(Flag::OptArg, longname));
+	}
+	void add_opt_arg(char shortname, std::string_view longname) {
+		assert(find_flag(shortname) == nullptr);
+		assert(find_flag(longname) == nullptr);
+		flags.push_back(Flag(Flag::OptArg, shortname, longname));
+	}
+
+	void add_req_arg(char shortname) {
+		assert(find_flag(shortname) == nullptr);
+		flags.push_back(Flag(Flag::ReqArg, shortname));
+	}
+	void add_req_arg(std::string_view longname) {
+		assert(find_flag(longname) == nullptr);
+		flags.push_back(Flag(Flag::ReqArg, longname));
+	}
+	void add_req_arg(char shortname, std::string_view longname) {
+		assert(find_flag(shortname) == nullptr);
+		assert(find_flag(longname) == nullptr);
+		flags.push_back(Flag(Flag::ReqArg, shortname, longname));
+	}
+	void add(const Flag &flag) {
+		assert(flag.shortname.has_value() ? 
+			find_flag(flag.shortname.value()) == nullptr : 1
+			&& "Short flag already in argschema!");
+		assert(flag.longname.has_value() ? find_flag(flag.longname.value()) == nullptr : 1);
+		assert(flag.shortname.has_value() + flag.longname.has_value() >= 1);
+		flags.push_back(flag);
+	}
+	void add(Flag &&flag) {
+		flags.push_back(std::move(flag));
+	}
+	using RetType = std::expected<std::pair<ArgMap, std::vector<std::string_view>>, std::string>;
+
+	RetType parse(int argc, char **argv) const {
+		ArgMap::ArgsType args;
+		std::vector<std::string_view> leftovers;
+		for (int i = 1; i < argc; ++i) {
+			if (argv[i][0] == '-' && argv[i][1] == '-') {
+				// long
+			}
+			else if (argv[i][0] == '-') {
+				for (auto ch : std::string_view(argv[i] + 1)) {
+					
+				}
+				// short
+			}
+			else {
+				leftovers.push_back(argv[i]);
+			}
+		}
+
+		return std::make_pair(ArgMap(std::move(args)), leftovers);
+	}
+
+	private:
+	friend class ShortArgInfo;
+	struct ShortArgInfo {
+		enum Type {
+			Options,
+			OptWithArg,
+			OptNeedsArg,
+			OptMayHaveArg,
+			NotShortArg,
+			Err,
+		};
+		ShortArgInfo() = delete;
+		ShortArgInfo(std::string_view view, const ArgSchema &sch) {
+			if (view.size() < 2) {
+				type = NotShortArg;
+				return;
+			}
+			if (view[0] != '-' || view[1] == '-') {
+				type = NotShortArg;
+				return;
+			}
+			if (view.size() == 2) {
+				const Flag *flg = sch.find_flag(view[1]);
+				if (flg == nullptr) {
+					type = Err;
+					txt = "Invalid short option";
+					optchr = view[1];
+					return;
+				}
+				if (flg->has_arg == Flag::OptArg) {
+					type = OptMayHaveArg;
+					optchr = view[1];
+				}
+				else if (flg->has_arg == Flag::ReqArg) {
+					type = OptNeedsArg;
+					optchr = view[1];
+				}
+				else {
+					type = Options;
+					txt = view.substr(1);
+				}
+				return;
+			}
+
+			
+		}
+		Type type;
+		char optchr;
+		std::string_view txt;
+	};
+	bool validate_flags(std::string_view flags) const {
+	}
+	const Flag *find_flag(char ch) const {
+		auto retit = std::find(flags.begin(), flags.end(), ch);
+		if (retit == flags.end()) {
+			return nullptr;
+		}
+		return &*retit;
+	}
+	const Flag *find_flag(std::string_view st) const {
+		auto retit = std::find(flags.begin(), flags.end(), st);
+		if (retit == flags.end()) {
+			return nullptr;
+		}
+		return &*retit;
+	}
+	std::vector<Flag> flags;
+};
 
