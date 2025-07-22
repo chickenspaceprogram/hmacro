@@ -1,0 +1,12 @@
+\def{comment}{1}{}\
+\
+\def{incldefs}{1}{\comment[\include{$1}]}\
+\
+\comment{ Boolean stuff: }\
+\def{not}{1}{\nand{$0}{$0}}\
+\def{and}{2}{\not[\nand{$0}{$1}]}\
+\def{or}{2}{\nand[\not{$0}][\not{$1}]}\
+\
+\comment{ Arithmetic stuff: }\
+\def{neg}{1}{\mult{-1}{$0}}\
+\def{sub}{1}{\add{$0}[\neg{$1}]}\
