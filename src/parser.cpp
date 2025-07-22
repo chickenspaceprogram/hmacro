@@ -19,7 +19,7 @@ struct MacroCtx {
 	TokBuf &buf;
 };
 
-using RetType = std::optional<ErrType>;
+using RetType = std::expected<std::string, ErrType>;
 using MacroFn = RetType (*)(MacroCtx ctx);
 
 std::optional<size_t> parse_int(std::string_view &view) {
@@ -81,21 +81,21 @@ RetType def_fn(MacroCtx ctx) {
 	if (!is_macro_name(ctx.argstack[0])) {
 		ErrType es;
 		es.push_back("Invalid macro name provided to \\def");
-		return std::optional(es);
+		return std::unexpected(es);
 	}
 	std::string_view num_view = ctx.argstack[1];
 	auto nargs = parse_int(num_view);
 	if (!nargs.has_value()) {
 		ErrType es;
 		es.push_back("Non-numeric value provided as argument $1 of \\def");
-		return std::optional(es);
+		return std::unexpected(es);
 	}
 	auto defargs(parse_def_args(ctx.argstack[2]));
 	if (!defargs.has_value()) {
-		return std::optional(defargs.error());
+		return std::unexpected(defargs.error());
 	}
 	ctx.map.emplace(std::move(ctx.argstack[0]), MacroTemplate(std::move(defargs.value()), nargs.value()));
-	return std::nullopt;
+	return "";
 }
 
 RetType include_fn(MacroCtx ctx) {
@@ -106,16 +106,16 @@ RetType include_fn(MacroCtx ctx) {
 		st += ctx.argstack[0];
 		st += "\'";
 		es.push_back(st);
-		return std::optional(es);
+		return std::unexpected(es);
 	}
 	if (cd == ErrCode::RecursiveInclude) {
 		std::string st = "File `";
 		st += ctx.argstack[0];
 		st += "\' was recursively included";
 		es.push_back(st);
-		return std::optional(es);
+		return std::unexpected(es);
 	}
-	return std::nullopt;
+	return "";
 }
 
 RetType if_fn(MacroCtx ctx) {
@@ -124,7 +124,7 @@ RetType if_fn(MacroCtx ctx) {
 	if (!res.has_value()) {
 		ErrType es;
 		es.push_back("Failed to parse integer argument to macro \\if");
-		return std::optional(es);
+		return std::unexpected(es);
 	}
 	if (res.value()) {
 		ctx.buf.push_front(ctx.argstack[1]);
@@ -132,7 +132,7 @@ RetType if_fn(MacroCtx ctx) {
 	else {
 		ctx.buf.push_front(ctx.argstack[2]);
 	}
-	return std::nullopt;
+	return "";
 }
 
 std::string num_to_argno(size_t num) {
@@ -151,14 +151,14 @@ RetType err_fn(MacroCtx ctx) {
 		el += '\'';
 		es.push_back(el);
 	}
-	return std::optional(es);
+	return std::unexpected(es);
 }
 
 const std::array<std::pair<std::string_view, std::pair<size_t, MacroFn>>, 26> INBUILT_MACRO_ARR = {
 	std::make_pair("\\def", std::make_pair(3, def_fn)),
 	std::make_pair("\\undef", std::make_pair(1, [](MacroCtx ctx) -> RetType {
 		ctx.map.erase(std::string(ctx.argstack[0]));
-		return std::nullopt;
+		return "";
 	})),
 	std::make_pair("\\include", std::make_pair(1, include_fn)),
 	std::make_pair("\\if", std::make_pair(3, if_fn)),
@@ -209,7 +209,7 @@ MacroTemplate::expand(ArgStack &args) const {
 	return out;
 }
 
-std::optional<ErrType> 
+std::expected<std::string, ErrType> 
 expand_macro(
 	const std::string &name, 
 	ArgStack &args,
@@ -226,80 +226,82 @@ expand_macro(
 		str += name;
 		str += "\'";
 		evec.push_back(str);
-		return std::optional(evec);
+		return std::unexpected(evec);
 	}
 	auto res = map.at(name).expand(args);
 	if (!res.has_value()) {
-		return std::optional(res.error());
+		return std::unexpected(res.error());
 	}
-	buf.push_front(res.value());
-	return std::nullopt;
+	return res.value();
 }
 
-std::expected<std::string, ErrType> parse(TokBuf &buf, MacroMap &map) {
-	bool parse_scope = false;
-	bool should_expand_macro = false;
-	std::optional<Token> res(buf.peek_front(parse_scope));
+enum class ParserState {
+	Default,
+	ParsingScope,
+};
+
+std::expected<std::string, ErrType> parse(TokBuf &buf, MacroMap &map, ArgStack &stk) {
+	ParserState state = ParserState::Default;
+	std::optional<Token> res(buf.peek_front(false));
 	std::string outbuf;
 
 	std::string macname;
 	std::vector<std::string> args;
 	while (res.has_value()) {
-		if (res.value().type == Token::Txt) {
-			outbuf += res.value().elem;
-			buf.pop_front(res.value().elem.size());
-
-			// if we were parsing scopes, that's done, so expand the macro
-			should_expand_macro = parse_scope;
-			parse_scope = false;
+		if (state == ParserState::Default) {
+			if (res.value().type == Token::ExpScopeEnd) {
+				return outbuf;
+			}
+			if (res.value().type == Token::Macro) {
+				state = ParserState::ParsingScope;
+				macname = res.value().elem;
+			}
+			else {
+				outbuf += res.value().elem;
+			}
 		}
-		else if (res.value().type == Token::Scope) {
-			args.push_back(std::string(res.value().elem.substr(1, res.value().elem.size() - 1)));
-			buf.pop_front(res.value().elem.size());
-		}
-		else if (res.value().type == Token::ExpScopeStart) {
-			buf.pop_front(res.value().elem.size());
-			auto result = parse(buf, map);
-			if (result.has_value()) {
+		else if (state == ParserState::ParsingScope) {
+			if (res.value().type == Token::Scope) {
+				args.push_back(std::string(res.value().elem.substr(1, res.value().elem.size() - 1)));
+			}
+			else if (res.value().type == Token::ExpScopeStart) {
+				buf.pop_front(1);
+				auto result = parse(buf, map, stk);
+				if (!result.has_value()) {
+					return result;
+				}
+				if (buf.size() == 0) {
+					ErrType es;
+					es.push_back("Failed to find matching `]'");
+					return std::unexpected(es);
+				}
+				buf.pop_front(1);
 				args.push_back(std::move(result.value()));
 			}
 			else {
-				return result;
-			}
-		}
-		else if (res.value().type == Token::ExpScopeEnd) {
-			// not in macro,m can just exit
-			if (!parse_scope) {
-				buf.pop_front(res.value().elem.size());
-				return std::expected<std::string, ErrType>(std::move(outbuf));
-			}
-		}
-		else if (parse_scope) {
-			if (res.value().elem == "\\sep") {
-				buf.pop_front(res.value().elem.size());
-				parse_scope = false;
-				should_expand_macro = true;
-			}
-			else {
-				args.push_back(MacroArg(res.value()));
-				buf.pop_front(res.value().elem.size());
+				// this is fine even if we find a `]', just
+				// expand the current macro, and then loop
+				// back and pop off the buf until we get the `]'.
+
+				state = ParserState::Default;
+				stk.push(args);
+				auto res_exp = expand_macro(macname, stk, map, buf);
+				if (!res_exp.has_value()) {
+					return res_exp;
+				}
+				buf.push_front(res_exp.value());
 			}
 		}
 		else {
-			macname = res.value().elem;
-			parse_scope = true;
+			assert(0 && "Added extra parser state but did not change parser!");
 		}
-		// expanding macro, if we have one
-		if (should_expand_macro) {
-			should_expand_macro = false;
-			auto res_exp = expand_macro(macname, args, map);
-			if (res_exp.has_value()) {
-				buf.push_front(res_exp.value());
-			}
-			else {
-				return std::unexpected(std::move(res_exp.error()));
-			}
-		}
+		res = buf.peek_front(state == ParserState::ParsingScope);
 	}
-	return std::expected<std::string, ErrType>(std::move(outbuf));
+
+	if (buf.size() != 0) {
+		ErrType es;
+		es.push_back("Found unparsable token");
+		return std::unexpected(es);
+	}
+	return outbuf;
 }
