@@ -257,7 +257,7 @@ std::expected<std::string, ErrType> parse(TokBuf &buf, MacroMap &map, ArgStack &
 		}
 		else if (state == ParserState::ParsingScope) {
 			if (res.value().type == Token::Scope) {
-				args.push_back(std::string(res.value().elem.substr(1, res.value().elem.size() - 1)));
+				args.push_back(std::string(res.value().elem.substr(1, res.value().elem.size() - 2)));
 			}
 			else if (res.value().type == Token::ExpScopeStart) {
 				buf.pop_front(1);

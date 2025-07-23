@@ -10,23 +10,43 @@ Buildable with CMake.
 ~~~
 Usage:
 
-hmacro [OPTIONS] <filename>
+hmacro [Flags] [Options] <filenames>
 
-`-v', `--version' - Print a version message, then exit
-`-h', `--help'    - Print a help message, then exit
-`--license'       - Display information about hmacro's license
-`-Dmacro;3;exp'   - Defines a new macro, named `macro', that pops 3 arguments
-                    from the stack and expands to `exp'. The macro is defined
-                    after the Prelude and before any files are expanded.
-`-p <prelude>'    - Adds the file at <prelude> to the Prelude. All files are
-                    added after the default Prelude, if it is enabled.
-`-e <epilogue>'   - Adds the file at <epilogue> to the Epilogue. All files are
-                    added before the default Epilogue, if it is enabled.
-`-P'              - Disables the default Prelude and Epilogue.
-`-E`              - Disables postprocessing of escaped characters
+Flags:
+
+-v, --version            - Print a version message, then exit
+-h, --help               - Print a help message, then exit
+-l, --license            - Display information about hmacro's license
+-P, --no-default-prelude - Disables the default Prelude and Epilogue.
+-E, --keep-esc           - Disables postprocessing of escaped characters
+
+Options:
+
+-Dmacro;3;exp         - Defines a new macro, named "macro", that pops 3
+--define=macro;3;exp    arguments from the stack and expands to "exp". The
+                        macro is defined after the Prelude and before any
+                        files are expanded.
+
+-p <prelude>          - Adds the file <prelude> to the Prelude. All files are
+--prelude=<prelude>     added after the default Prelude, if enabled.
+
+-e <epilogue>         - Adds the file <epilogue> to the Epilogue. All files
+--epilogue=<epilogue>   are added before the default Epilogue, if enabled.
+
+-o <output>           - Writes output to the file <output>. If this option is 
+--output=<output>       not specified, output is written to stdout.
 
 You can pass a list of filenames to hmacro.
 They will each be expanded separately and the results concatenated.
+
+Passing -- as an argument will result in all arguments after it being treated
+as files to read from.
+
+Furthermore, passing - as an argument will make hmacro read from stdin.
+
+hmacro doesn't play super nicely in shell pipes. It works fine, but the current
+implementation buffers input until it ends, then parses and outputs it all at
+once.
 ~~~
 
 ## Source file format

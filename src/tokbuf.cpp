@@ -131,6 +131,12 @@ ErrCode TokBuf::push_file(std::string_view filname) {
 		size_t orig_sz = size() + 1;
 		std::filesystem::path pth(filname);
 		if (pth.is_absolute()) {
+			if (recursive_include(pth)) {
+				return ErrCode::RecursiveInclude;
+			}
+			filnames.push_back(std::make_pair(pth, orig_sz));
+		}
+		else if (!have_basepath && filnames.size() == 0) {
 			filnames.push_back(std::make_pair(pth, orig_sz));
 		}
 		else {

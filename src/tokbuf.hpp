@@ -25,11 +25,11 @@ enum class ErrCode {
 
 class TokBuf {
 	public:
-	TokBuf() = delete;
+	TokBuf() : have_basepath(false) {}
 	explicit TokBuf(std::filesystem::path &&filname) 
-		: basepath(std::move(filname)) {}
+		: have_basepath(true), basepath(std::move(filname)) {}
 	explicit TokBuf(const std::filesystem::path &filname) 
-		: basepath(filname) {}
+		: have_basepath(true), basepath(filname) {}
 	// token is only valid until push_front or reserve are called
 	std::optional<Token> peek_front(bool parse_scope);
 	void pop_front(size_t amt) {
@@ -88,6 +88,7 @@ class TokBuf {
 
 
 	std::unique_ptr<char []> buf;
+	bool have_basepath;
 	std::filesystem::path basepath;
 	std::vector<std::pair<std::filesystem::path, size_t>> filnames;
 	size_t fst_index = 0;

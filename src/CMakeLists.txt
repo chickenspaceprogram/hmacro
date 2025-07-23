@@ -18,9 +18,13 @@
 
 cmake_minimum_required(VERSION 3.21)
 
-add_library(hmacro 
+add_executable(hmacro 
 	tokbuf.hpp
 	tokbuf.cpp
 	parser.cpp
 	parser.hpp
+	argparse.hpp
+	argparse.cpp
+	main.cpp
+	cli-handler.hpp
 )
