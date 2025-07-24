@@ -2,7 +2,6 @@
 #include <bit>
 #include <cstring>
 #include <cctype>
-#include <fstream>
 
 namespace {
 
@@ -85,34 +84,42 @@ Token parse_text(std::string_view view) {
 
 }
 
-std::optional<Token> TokBuf::peek_front(bool parse_scope) {
+TokBuf::ErrCode TokBuf::peek_front(Token &tok, bool parse_scope) const {
 	if (empty()) {
-		return std::nullopt;
+		return ErrCode::NoTok;
 	}
 	if (check_esc(get_view())) {
-		return std::optional(parse_text(get_view())); // escchr, parse as txt
+		tok = parse_text(get_view());
+		return ErrCode::Ok; // escchr, parse as txt
 	}
 	std::optional<Token> res = try_parse_macro(get_view());
 	if (res.has_value()) {
-		return res;
+		tok = res.value();
+		return ErrCode::Ok;
 	}
 	if (parse_scope && size() >= 2 && buf[fst_index] == '{') {
 		res = try_parse_scope(get_view());
 		if (res.has_value()) {
-			return res;
+			tok = res.value();
+			return ErrCode::Ok;
 		}
 		else {
-			errptr = "Failed to find closing bracket";
-			return std::nullopt;
+			tok.elem = "Failed to find closing bracket";
+			return ErrCode::Err;
 		}
 	}
 	if (parse_scope && size() >= 1 && buf[fst_index] == '[') {
-		return std::optional(Token{.type = Token::ExpScopeStart, .elem = std::string_view(&buf[fst_index], 1)});
+		tok.type = Token::ExpScopeStart;
+		tok.elem = std::string_view(&buf[fst_index], 1);
+		return ErrCode::Ok;
 	}
 	if (size() >= 1 && buf[fst_index] == ']') {
-		return std::optional(Token{.type = Token::ExpScopeEnd, .elem = std::string_view(&buf[fst_index], 1)});
+		tok.type = Token::ExpScopeEnd;
+		tok.elem = std::string_view(&buf[fst_index], 1);
+		return ErrCode::Ok;
 	}
-	return std::optional(parse_text(get_view()));
+	tok = parse_text(get_view());
+	return ErrCode::Ok;
 }
 
 void TokBuf::push_front(std::string_view elem) {
@@ -124,45 +131,14 @@ void TokBuf::push_front(std::string_view elem) {
 	std::memcpy(&buf[fst_index], elem.data(), elem.size());
 }
 
-
-ErrCode TokBuf::push_file(std::string_view filname) {
-	// i hate exceptions, why is the STL like this
-	try {
-		size_t orig_sz = size() + 1;
-		std::filesystem::path pth(filname);
-		if (pth.is_absolute()) {
-			if (recursive_include(pth)) {
-				return ErrCode::RecursiveInclude;
-			}
-			filnames.push_back(std::make_pair(pth, orig_sz));
-		}
-		else if (!have_basepath && filnames.size() == 0) {
-			filnames.push_back(std::make_pair(pth, orig_sz));
-		}
-		else {
-			std::filesystem::path dir(top_path().parent_path());
-			dir / pth;
-			pth = dir;
-			if (recursive_include(dir)) {
-				return ErrCode::RecursiveInclude;
-			}
-			filnames.push_back(std::make_pair(dir, orig_sz));
-		}
-		size_t sz = std::filesystem::file_size(pth);
-		reserve(sz + size());
-		std::ifstream in(pth.string());
-		in.read(&buf[fst_index - sz], sz);
-		size_t n_read = in.gcount(); // cast is fine, negative std::streamsize aren't used
-		if (n_read != sz) {
-			return ErrCode::SysErr;
-		}
-		fst_index -= sz;
-	} catch (const std::filesystem::filesystem_error &err) {
-		return ErrCode::SysErr;
-	} catch (const std::ios_base::failure &fail) {
-		return ErrCode::SysErr;
+bool TokBuf::push_from_istream(std::istream &stream, size_t num_to_push) {
+	if (num_to_push == 0) {
+		return true;
 	}
-	return ErrCode::Ok;
+	reserve(size() + num_to_push);
+	fst_index -= num_to_push;
+	stream.read(&buf[fst_index], num_to_push);
+	return num_to_push == (size_t)stream.gcount();
 }
 
 void TokBuf::reserve(size_t amt) {
@@ -183,15 +159,4 @@ void TokBuf::reserve(size_t amt) {
 }
 
 
-bool TokBuf::recursive_include(const std::filesystem::path &path) const {
-	std::error_code ec;
-	if (std::filesystem::equivalent(basepath, path, ec)) {
-		return true;
-	}
-	for (const auto &[elem, _] : filnames) {
-		if (std::filesystem::equivalent(elem, path, ec)) {
-			return true;
-		}
-	}
-	return false;
-}
+

@@ -1,4 +1,3 @@
-#include <functional>
 #include <array>
 #include <charconv>
 #include <algorithm>
@@ -11,7 +10,7 @@ namespace {
 struct MacroCtx {
 	ArgStack &argstack;
 	MacroMap &map;
-	TokBuf &buf;
+	FileHandler &buf;
 };
 
 using RetType = std::expected<std::string, ErrType>;
@@ -94,19 +93,11 @@ RetType def_fn(MacroCtx ctx) {
 }
 
 RetType include_fn(MacroCtx ctx) {
-	ErrCode cd = ctx.buf.push_file(ctx.argstack[0]);
-	ErrType es;
-	if (cd == ErrCode::SysErr) {
-		std::string st = "System error when including file `";
+	if (!ctx.buf.add_file(ctx.argstack[0])) {
+		ErrType es;
+		std::string st = "Error when including file `";
 		st += ctx.argstack[0];
 		st += "\'";
-		es.push_back(st);
-		return std::unexpected(es);
-	}
-	if (cd == ErrCode::RecursiveInclude) {
-		std::string st = "File `";
-		st += ctx.argstack[0];
-		st += "\' was recursively included";
 		es.push_back(st);
 		return std::unexpected(es);
 	}
@@ -209,7 +200,7 @@ expand_macro(
 	const std::string &name, 
 	ArgStack &args,
 	MacroMap &map,
-	TokBuf &buf
+	FileHandler &buf
 ) {
 	if (INBUILT_MACRO_MAP.contains(name)) {
 		auto [minargs, fn] = INBUILT_MACRO_MAP.at(name);
@@ -235,31 +226,32 @@ enum class ParserState {
 	ParsingScope,
 };
 
-std::expected<std::string, ErrType> parse(TokBuf &buf, MacroMap &map, ArgStack &stk) {
+std::expected<std::string, ErrType> parse(FileHandler &buf, MacroMap &map, ArgStack &stk) {
 	ParserState state = ParserState::Default;
-	std::optional<Token> res(buf.peek_front(false));
+	Token tok;
+	TokBuf::ErrCode ec = buf.peek_front(tok, false);
 	std::string outbuf;
 
 	std::string macname;
 	std::vector<std::string> args;
-	while (res.has_value()) {
+	while (ec == TokBuf::Ok) {
 		if (state == ParserState::Default) {
-			if (res.value().type == Token::ExpScopeEnd) {
+			if (tok.type == Token::ExpScopeEnd) {
 				return outbuf;
 			}
-			if (res.value().type == Token::Macro) {
+			if (tok.type == Token::Macro) {
 				state = ParserState::ParsingScope;
-				macname = res.value().elem;
+				macname = tok.elem;
 			}
 			else {
-				outbuf += res.value().elem;
+				outbuf += tok.elem;
 			}
 		}
 		else if (state == ParserState::ParsingScope) {
-			if (res.value().type == Token::Scope) {
-				args.push_back(std::string(res.value().elem.substr(1, res.value().elem.size() - 2)));
+			if (tok.type == Token::Scope) {
+				args.push_back(std::string(tok.elem.substr(1, tok.elem.size() - 2)));
 			}
-			else if (res.value().type == Token::ExpScopeStart) {
+			else if (tok.type == Token::ExpScopeStart) {
 				buf.pop_front(1);
 				auto result = parse(buf, map, stk);
 				if (!result.has_value()) {
@@ -290,7 +282,7 @@ std::expected<std::string, ErrType> parse(TokBuf &buf, MacroMap &map, ArgStack &
 		else {
 			assert(0 && "Added extra parser state but did not change parser!");
 		}
-		res = buf.peek_front(state == ParserState::ParsingScope);
+		ec = buf.peek_front(tok, state == ParserState::ParsingScope);
 	}
 
 	if (buf.size() != 0) {
@@ -301,22 +293,3 @@ std::expected<std::string, ErrType> parse(TokBuf &buf, MacroMap &map, ArgStack &
 	return outbuf;
 }
 
-namespace {
-
-const char INBUILT_PRELUDE[] = {
-#include "prelude.xxd.hm"
-};
-
-}
-
-std::expected<std::string, ErrType>
-parse_file(
-	std::string_view prelude,
-	std::string_view epilogue,
-	const std::string &filname,
-	bool use_default_prelude
-) {
-	TokBuf buf(filname);
-	buf.push_front(epilogue);
-	buf.push_front(prelude);
-}

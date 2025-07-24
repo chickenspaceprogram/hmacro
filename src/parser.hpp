@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <cassert>
 #include <algorithm>
-#include "tokbuf.hpp"
+#include "filehandler.hpp"
 
 using MacroTemplateElem = std::variant<std::string, size_t>;
 
@@ -51,7 +51,7 @@ using MacroMap = std::unordered_map<std::string, MacroTemplate>;
 
 std::expected<std::string, ErrType> 
 parse(
-	TokBuf &buf, 
+	FileHandler &buf, 
 	MacroMap &map
 );
 
