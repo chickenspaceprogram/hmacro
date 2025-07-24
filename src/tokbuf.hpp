@@ -74,4 +74,4 @@ class TokBuf {
 	size_t total_size = 0;
 };
 
-
+std::string remove_escs(std::string_view view);

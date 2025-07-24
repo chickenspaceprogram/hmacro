@@ -34,19 +34,19 @@ class FilePos {
 
 	FilePos(
 		const PathType &pth,
-		size_t fst_untouched_chr, size_t last_chr
+		size_t fst_untouched_chr, size_t fst_of_next_file
 	) : path(pth), 
-	fst_untouched_chr(fst_untouched_chr), last_chr(last_chr) {}
+	fst_untouched_chr(fst_untouched_chr), fst_of_next_file(fst_of_next_file) {}
 
 	FilePos(
 		PathType &&pth,
-		size_t fst_untouched_chr, size_t last_chr
+		size_t fst_untouched_chr, size_t fst_of_next_file
 	) : path(std::move(pth)),
-	fst_untouched_chr(fst_untouched_chr), last_chr(last_chr) {}
+	fst_untouched_chr(fst_untouched_chr), fst_of_next_file(fst_of_next_file) {}
 
 	PathType path;
 	size_t fst_untouched_chr;
-	size_t last_chr;
+	size_t fst_of_next_file;
 	size_t cur_row = 1;
 	size_t cur_col = 1;
 };

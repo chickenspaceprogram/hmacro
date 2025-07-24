@@ -10,14 +10,13 @@ namespace {
 // contains (num newlines, chrs after last newline)
 std::pair<size_t, size_t> get_nls(std::string_view view) {
 	size_t nl_loc = view.find_first_of('\n');
-	size_t fst_remaining_chr = 0;
 	size_t num_nls = 0;
 	while (nl_loc != std::string_view::npos) {
 		++num_nls;
-		fst_remaining_chr = nl_loc + 1;
+		view.remove_prefix(nl_loc + 1);
 		nl_loc = view.find_first_of('\n');
 	}
-	return std::make_pair(num_nls, view.size() - fst_remaining_chr);
+	return std::make_pair(num_nls, view.size());
 }
 
 const char PRELUDE[] = {
@@ -33,7 +32,7 @@ std::optional<FilePos> FilePos::add_file(TokBuf &tbuf, std::filesystem::path &&p
 	std::ifstream stream(pth);
 	std::error_code ec;
 	uintmax_t filesize = std::filesystem::file_size(pth, ec);
-	if (!ec || filesize == static_cast<uintmax_t>(-1)) {
+	if (ec || filesize == static_cast<uintmax_t>(-1)) {
 		return std::nullopt;
 	}
 	if (!tbuf.push_from_istream(stream, filesize)) {
@@ -43,26 +42,31 @@ std::optional<FilePos> FilePos::add_file(TokBuf &tbuf, std::filesystem::path &&p
 	return FilePos(
 		pth,
 		end_sz,
-		start_sz + 1
+		start_sz
 	);
 }
 FilePos FilePos::add_inbuilt_prelude(TokBuf &tbuf) {
 	size_t start_sz = tbuf.size();
 	tbuf.push_front(PRELUDE_VIEW);
 	size_t end_sz = tbuf.size();
-	return FilePos(std::string_view("Default Prelude"), end_sz, start_sz + 1);
+	return FilePos(
+		std::string_view("Default Prelude"),
+		end_sz,
+		start_sz
+	);
 }
 
 std::optional<size_t> FilePos::increment_pos(const TokBuf &buf, size_t num_popped) {
-	assert(buf.size() >= last_chr);
+	assert(buf.size() >= num_popped);
+	assert(buf.size() >= fst_of_next_file);
 	// indexing from the back; last char of buf is at index 1
 	size_t last_chr_unpopped = buf.size() - num_popped;
 	if (last_chr_unpopped >= fst_untouched_chr) {
 		return std::nullopt;
 	}
-	if (last_chr_unpopped < last_chr) {
+	if (last_chr_unpopped < fst_of_next_file) {
 		// entire file popped
-		return last_chr - last_chr_unpopped - 1;
+		return fst_of_next_file - last_chr_unpopped;
 	}
 	size_t fst_chr_of_file = buf.size() - fst_untouched_chr;
 	size_t nchrs_popped_from_file = fst_untouched_chr - last_chr_unpopped;
@@ -76,25 +80,26 @@ std::optional<size_t> FilePos::increment_pos(const TokBuf &buf, size_t num_poppe
 	}
 	fst_untouched_chr = last_chr_unpopped;
 
-	// invariant - first character must be further back than last one
-	assert(fst_untouched_chr >= last_chr);
+	// invariant - first character can be at most the first of the next file (this exists for providing filepos for the last file)
+	assert(fst_untouched_chr >= fst_of_next_file);
 	return std::nullopt;
 }
 
-std::expected<FileHandler, std::string> FileHandler::no_default_prelude(FileList preludes, FileList epilogues, FileList start_files) {
+std::expected<FileHandler, std::string>
+FileHandler::no_default_prelude(FileList preludes, FileList epilogues, FileList start_files) {
 	FileHandler buf;
 	try {
-		for (auto it = epilogues.rbegin(); it == epilogues.rend(); ++it) {
+		for (auto it = epilogues.rbegin(); it != epilogues.rend(); ++it) {
 			if (!buf.add_file_nonrelative(*it)) {
 				return std::unexpected("Error opening file: " + std::string(*it));
 			}
 		}
-		for (auto it = start_files.rbegin(); it == start_files.rend(); ++it) {
+		for (auto it = start_files.rbegin(); it != start_files.rend(); ++it) {
 			if (!buf.add_file_nonrelative(*it)) {
 				return std::unexpected("Error opening file: " + std::string(*it));
 			}
 		}
-		for (auto it = preludes.rbegin(); it == preludes.rend(); ++it) {
+		for (auto it = preludes.rbegin(); it != preludes.rend(); ++it) {
 			if (!buf.add_file_nonrelative(*it)) {
 				return std::unexpected("Error opening file: " + std::string(*it));
 			}
@@ -136,4 +141,5 @@ void FileHandler::pop_front(size_t amt) {
 		pos_stack.pop_back();
 		res = pos_stack.back().increment_pos(tbuf, res.value());
 	}
+	tbuf.pop_front(amt);
 }

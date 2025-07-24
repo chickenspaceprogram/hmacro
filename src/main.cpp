@@ -119,23 +119,29 @@ int main(int argc, char **argv) {
 		          << handler.error()
 			  << "\nTry hmacro --help"
 			  << std::endl;
+		return EXIT_FAILURE;
 	}
 	auto macro_map = get_init_macromap(hndl.value().macros);
 	if (!macro_map.has_value()) {
 		std::cerr << "Error: invalid predefined macro. Try hmacro --help" << std::endl;
+		return EXIT_FAILURE;
 	}
 
 	ArgStack stk;
 
 	auto result = parse(handler.value(), macro_map.value(), stk);
 	if (!result.has_value()) {
-		std::cerr << "hmacro error:\n";
+		std::cerr << handler.value().filename() << ':' << handler.value().row() << ':' << handler.value().col() << ":\n";
 		for (const auto &el : result.error()) {
 			std::cerr << el << '\n';
 		}
-		std::cerr << std::endl;
+		stk.dbg_print(std::cerr);
+		std::cerr.flush();
+		return EXIT_FAILURE;
 	}
 
 	// temporary!
-	std::cout << result.value() << std::endl;
+	//
+	std::cout << remove_escs(result.value());
+	std::cerr.flush();
 }

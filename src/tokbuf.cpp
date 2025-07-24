@@ -25,7 +25,7 @@ std::optional<Token> try_parse_macro(std::string_view view) {
 	) {
 		return std::nullopt;
 	}
-	size_t ind = 0;
+	size_t ind = 2;
 	for (; ind < view.size(); ++ind) {
 		if (!(std::isalnum(view[ind]) || view[ind] == '-' || view[ind] == '_')) {
 			break;
@@ -49,27 +49,27 @@ std::optional<Token> try_parse_scope(std::string_view view) {
 		if (res == std::string_view::npos) {
 			break;
 		}
-		i += res;
-		if (view[i] == '\\') {
+		if (view[res] == '\\') {
 			++i;
 		}
-		else if (view[i] == '{') {
+		else if (view[res] == '{') {
 			++nbrack;
 		}
 		else {
 			--nbrack;
 		}
+		i = res + 1;
 	} while (nbrack != 0 && i < view.size());
 	if (nbrack != 0) {
 		return std::nullopt;
 	}
-	return std::optional(Token {.type = Token::Scope, .elem = view.substr(0, i + 1)});
+	return std::optional(Token {.type = Token::Scope, .elem = view.substr(0, i)});
 }
 
 Token parse_text(std::string_view view) {
 	size_t ind = 0;
 	while (true) {
-		ind = view.substr(ind).find_first_of("\\]");
+		ind = view.find_first_of("\\]", ind);
 		if (ind == std::string_view::npos) {
 			return Token {.type = Token::Txt, .elem = view};
 		}
@@ -159,4 +159,25 @@ void TokBuf::reserve(size_t amt) {
 }
 
 
+std::string remove_escs(std::string_view view) {
+	std::string outbuf;
+	size_t esc_loc = view.find_first_of('\\');
+	while (esc_loc != std::string_view::npos) {
+		outbuf += view.substr(0, esc_loc);
+		view.remove_prefix(esc_loc);
+		if (check_esc(view)) {
+			if (view[1] != '\n') {
+				outbuf += view[1];
+			}
+			view.remove_prefix(2);
+		}
+		else {
+			outbuf += view.substr(0, 2);
+			view.remove_prefix(view.size() >= 2 ? 2 : view.size());
+		}
+		esc_loc = view.find_first_of('\\');
+	}
+	outbuf += view;
+	return outbuf;
+}
 

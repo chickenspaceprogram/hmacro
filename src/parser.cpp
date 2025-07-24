@@ -86,35 +86,35 @@ RetType err_fn(MacroCtx ctx) {
 }
 
 const std::array<std::pair<std::string_view, std::pair<size_t, MacroFn>>, 26> INBUILT_MACRO_ARR = {
-	std::make_pair("\\def", std::make_pair(3, def_fn)),
-	std::make_pair("\\undef", std::make_pair(1, [](MacroCtx ctx) -> RetType {
+	std::make_pair("def", std::make_pair(3, def_fn)),
+	std::make_pair("undef", std::make_pair(1, [](MacroCtx ctx) -> RetType {
 		ctx.map.erase(std::string(ctx.argstack[0]));
 		return "";
 	})),
-	std::make_pair("\\include", std::make_pair(1, include_fn)),
-	std::make_pair("\\if", std::make_pair(3, if_fn)),
-	std::make_pair("\\error", std::make_pair(0, err_fn)),
-	std::make_pair("\\defined", std::make_pair(1, nullptr)),
-	std::make_pair("\\size", std::make_pair(0, nullptr)),
-	std::make_pair("\\suffix", std::make_pair(2, nullptr)),
-	std::make_pair("\\prefix", std::make_pair(2, nullptr)),
-	std::make_pair("\\len", std::make_pair(1, nullptr)),
-	std::make_pair("\\replace", std::make_pair(3, nullptr)),
-	std::make_pair("\\reverse", std::make_pair(1, nullptr)),
-	std::make_pair("\\find", std::make_pair(2, nullptr)),
-	std::make_pair("\\rfind", std::make_pair(2, nullptr)),
-	std::make_pair("\\findany", std::make_pair(2, nullptr)),
-	std::make_pair("\\rfindany", std::make_pair(2, nullptr)),
-	std::make_pair("\\findnone", std::make_pair(2, nullptr)),
-	std::make_pair("\\rfindnone", std::make_pair(2, nullptr)),
-	std::make_pair("\\eq", std::make_pair(2, nullptr)),
-	std::make_pair("\\streq", std::make_pair(2, nullptr)),
-	std::make_pair("\\gt", std::make_pair(2, nullptr)),
-	std::make_pair("\\nand", std::make_pair(2, nullptr)),
-	std::make_pair("\\isnum", std::make_pair(1, nullptr)),
-	std::make_pair("\\add", std::make_pair(2, nullptr)),
-	std::make_pair("\\mult", std::make_pair(2, nullptr)),
-	std::make_pair("\\div", std::make_pair(2, nullptr)),
+	std::make_pair("include", std::make_pair(1, include_fn)),
+	std::make_pair("if", std::make_pair(3, if_fn)),
+	std::make_pair("error", std::make_pair(0, err_fn)),
+	std::make_pair("defined", std::make_pair(1, nullptr)),
+	std::make_pair("size", std::make_pair(0, nullptr)),
+	std::make_pair("suffix", std::make_pair(2, nullptr)),
+	std::make_pair("prefix", std::make_pair(2, nullptr)),
+	std::make_pair("len", std::make_pair(1, nullptr)),
+	std::make_pair("replace", std::make_pair(3, nullptr)),
+	std::make_pair("reverse", std::make_pair(1, nullptr)),
+	std::make_pair("find", std::make_pair(2, nullptr)),
+	std::make_pair("rfind", std::make_pair(2, nullptr)),
+	std::make_pair("findany", std::make_pair(2, nullptr)),
+	std::make_pair("rfindany", std::make_pair(2, nullptr)),
+	std::make_pair("findnone", std::make_pair(2, nullptr)),
+	std::make_pair("rfindnone", std::make_pair(2, nullptr)),
+	std::make_pair("eq", std::make_pair(2, nullptr)),
+	std::make_pair("streq", std::make_pair(2, nullptr)),
+	std::make_pair("gt", std::make_pair(2, nullptr)),
+	std::make_pair("nand", std::make_pair(2, nullptr)),
+	std::make_pair("isnum", std::make_pair(1, nullptr)),
+	std::make_pair("add", std::make_pair(2, nullptr)),
+	std::make_pair("mult", std::make_pair(2, nullptr)),
+	std::make_pair("div", std::make_pair(2, nullptr)),
 };
 const std::unordered_map<std::string_view, std::pair<size_t, MacroFn>> 
 	INBUILT_MACRO_MAP(INBUILT_MACRO_ARR.begin(), INBUILT_MACRO_ARR.end());
@@ -124,23 +124,25 @@ const std::unordered_map<std::string_view, std::pair<size_t, MacroFn>>
 std::expected<std::vector<MacroTemplateElem>, ErrType> 
 parse_def_args(std::string_view sub) {
 	std::vector<MacroTemplateElem> argvec;
-	while (true) {
-		if (sub.size() == 0) {
-			return argvec;
-		}
+	while (sub.size() > 0) {
 		size_t i = sub.find_first_of("$\\");
 		if (i == std::string_view::npos) {
 			argvec.push_back(MacroTemplateElem(std::string(sub)));
 			return argvec;
 		}
-		char ch = sub[i];
-		sub.remove_prefix(i + 1);
-		if (ch == '\\') {
+		if (sub[i] == '\\') {
+			argvec.push_back(MacroTemplateElem(std::string(sub.substr(0, i + 2))));
+			// removing '\\'
+			sub.remove_prefix(i + 1);
 			if (sub.size() != 0) {
-				// only remove prefix when safe
+				// only remove escd chr when safe
 				sub.remove_prefix(1);
 			}
 			continue;
+		}
+		if (i != 0) {
+			argvec.push_back(MacroTemplateElem(std::string(sub.substr(0, i))));
+			sub.remove_prefix(i + 1);
 		}
 		auto result(parse_int(sub));
 		if (!result.has_value()) {
@@ -152,6 +154,7 @@ parse_def_args(std::string_view sub) {
 			argvec.push_back(MacroTemplateElem(result.value()));
 		}
 	}
+	return argvec;
 }
 
 std::optional<size_t> parse_int(std::string_view &view) {
@@ -191,11 +194,25 @@ expand_macro(
 	MacroMap &map,
 	FileHandler &buf
 ) {
-	if (INBUILT_MACRO_MAP.contains(name)) {
-		auto [minargs, fn] = INBUILT_MACRO_MAP.at(name);
-		return fn(MacroCtx{.argstack = args, .map = map, .buf = buf});
+	assert(name[0] == '\\');
+	std::string name_without_fst = name.substr(1);
+	if (INBUILT_MACRO_MAP.contains(name_without_fst)) {
+		auto [minargs, fn] = INBUILT_MACRO_MAP.at(name_without_fst);
+		if (args.size() < minargs) {
+			ErrType es;
+			std::string errtxt = "Too few arguments provided to inbuilt macro `" + name + "\'; ";
+			errtxt += std::to_string(minargs);
+			errtxt += " required, ";
+			errtxt += std::to_string(args.size());
+			errtxt += " provided";
+			es.push_back(errtxt);
+			return std::unexpected(es);
+		}
+		auto res = fn(MacroCtx{.argstack = args, .map = map, .buf = buf});
+		args.pop(minargs);
+		return res;
 	}
-	if (!map.contains(name)) {
+	if (!map.contains(name_without_fst)) {
 		ErrType evec;
 		std::string str = "Unknown macro `";
 		str += name;
@@ -203,11 +220,7 @@ expand_macro(
 		evec.push_back(str);
 		return std::unexpected(evec);
 	}
-	auto res = map.at(name).expand(args);
-	if (!res.has_value()) {
-		return std::unexpected(res.error());
-	}
-	return res.value();
+	return map.at(name_without_fst).expand(args);
 }
 
 enum class ParserState {
@@ -232,14 +245,17 @@ parse(FileHandler &buf, MacroMap &map, ArgStack &stk) {
 			if (tok.type == Token::Macro) {
 				state = ParserState::ParsingScope;
 				macname = tok.elem;
+				assert(macname.size() > 0);
 			}
 			else {
 				outbuf += tok.elem;
 			}
+			buf.pop_front(tok.elem.size());
 		}
 		else if (state == ParserState::ParsingScope) {
 			if (tok.type == Token::Scope) {
 				args.push_back(std::string(tok.elem.substr(1, tok.elem.size() - 2)));
+				buf.pop_front(tok.elem.size());
 			}
 			else if (tok.type == Token::ExpScopeStart) {
 				buf.pop_front(1);
@@ -267,6 +283,7 @@ parse(FileHandler &buf, MacroMap &map, ArgStack &stk) {
 					return res_exp;
 				}
 				buf.push_front(res_exp.value());
+				args.clear();
 			}
 		}
 		else {
@@ -282,4 +299,3 @@ parse(FileHandler &buf, MacroMap &map, ArgStack &stk) {
 	}
 	return outbuf;
 }
-

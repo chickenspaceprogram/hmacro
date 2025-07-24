@@ -1,9 +1,8 @@
-\def{h1}{<h1>$1</h1>}\
-\def{h2}{<h2>$1</h2>}\
-\def{h3}{<h3>$1</h3>}\
-\def{br}{<br>}\
-\def{p}{<p>$1<p>}\
+\def{h1}{1}{<h1>$0</h1>}\
+\def{h2}{1}{<h2>$0</h2>}\
+\def{h3}{1}{<h3>$0</h3>}\
+\def{br}{0}{<br>}\
+\def{p}{1}{<p>$0<p>}\
 \p{rizz}
-\ skibidi rizzler gyatt
+skibidi rizzler gyatt
 
-\cat{\p{rizz}}

@@ -19,7 +19,7 @@ class ArgStack {
 		);
 	}
 	void pop(size_t nel) {
-		assert(nel > stack.size());
+		assert(stack.size() >= nel);
 		stack.resize(stack.size() - nel);
 	}
 	std::string &operator[](size_t index) {
@@ -32,6 +32,13 @@ class ArgStack {
 	}
 	size_t size() const { return stack.size(); }
 	bool empty() const { return stack.empty(); }
+	// doesn't flush stream
+	void dbg_print(std::ostream &os) {
+		os << "ArgStack contents:\n";
+		for (size_t i = 0; i < stack.size(); ++i) {
+			os << '$' << i << ": " << (*this)[i]  << '\n';
+		}
+	}
 	private:
 	std::vector<std::string> stack;
 };
@@ -42,6 +49,7 @@ struct MacroTemplate {
 	MacroTemplate(std::vector<MacroTemplateElem> &&arg, uint64_t nargs)
 		: argslist(std::move(arg)), nargs(nargs) {}
 	std::expected<std::string, ErrType> expand(ArgStack &args) const;
+	uint64_t get_nargs() const { return nargs; }
 	private:
 	std::vector<MacroTemplateElem> argslist;
 	uint64_t nargs;
