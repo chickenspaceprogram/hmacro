@@ -16,61 +16,6 @@ struct MacroCtx {
 using RetType = std::expected<std::string, ErrType>;
 using MacroFn = RetType (*)(MacroCtx ctx);
 
-std::optional<size_t> parse_int(std::string_view &view) {
-	size_t start = 0;
-	auto [ptr, _] = std::from_chars(view.data(), view.data() + view.size(), start);
-	if (ptr == view.data()) {
-		return std::nullopt;
-	}
-	view.remove_prefix(ptr - view.data());
-	return std::optional(start);
-}
-
-std::expected<std::vector<MacroTemplateElem>, ErrType> 
-parse_def_args(const std::string &arg) {
-	std::vector<MacroTemplateElem> argvec;
-	std::string_view sub = arg;
-	while (true) {
-		if (sub.size() == 0) {
-			return argvec;
-		}
-		size_t i = sub.find_first_of("$\\");
-		if (i == std::string_view::npos) {
-			argvec.push_back(MacroTemplateElem(std::string(sub)));
-			return argvec;
-		}
-		char ch = sub[i];
-		sub.remove_prefix(i + 1);
-		if (ch == '\\') {
-			if (sub.size() != 0) {
-				// only remove prefix when safe
-				sub.remove_prefix(1);
-			}
-			continue;
-		}
-		auto result(parse_int(sub));
-		if (!result.has_value()) {
-			ErrType es;
-			es.push_back("Expected numeric characters to follow `$'");
-			return std::unexpected(es);
-		}
-		else {
-			argvec.push_back(MacroTemplateElem(result.value()));
-		}
-	}
-}
-bool is_macro_name(std::string_view nm) {
-	if (nm.size() < 1) {
-		return false;
-	}
-	if (!(std::isalpha(nm[0]) || nm[0] == '-' || nm[1] == '_')) {
-		return false;
-	}
-	return std::all_of(nm.begin(), nm.end(), 
-		[](char ch) -> bool { return std::isalnum(ch) || ch == '-' || ch == '_'; }
-	);
-}
-
 RetType def_fn(MacroCtx ctx) {
 	if (!is_macro_name(ctx.argstack[0])) {
 		ErrType es;
@@ -175,6 +120,50 @@ const std::unordered_map<std::string_view, std::pair<size_t, MacroFn>>
 	INBUILT_MACRO_MAP(INBUILT_MACRO_ARR.begin(), INBUILT_MACRO_ARR.end());
 
 }
+
+std::expected<std::vector<MacroTemplateElem>, ErrType> 
+parse_def_args(std::string_view sub) {
+	std::vector<MacroTemplateElem> argvec;
+	while (true) {
+		if (sub.size() == 0) {
+			return argvec;
+		}
+		size_t i = sub.find_first_of("$\\");
+		if (i == std::string_view::npos) {
+			argvec.push_back(MacroTemplateElem(std::string(sub)));
+			return argvec;
+		}
+		char ch = sub[i];
+		sub.remove_prefix(i + 1);
+		if (ch == '\\') {
+			if (sub.size() != 0) {
+				// only remove prefix when safe
+				sub.remove_prefix(1);
+			}
+			continue;
+		}
+		auto result(parse_int(sub));
+		if (!result.has_value()) {
+			ErrType es;
+			es.push_back("Expected numeric characters to follow `$'");
+			return std::unexpected(es);
+		}
+		else {
+			argvec.push_back(MacroTemplateElem(result.value()));
+		}
+	}
+}
+
+std::optional<size_t> parse_int(std::string_view &view) {
+	size_t start = 0;
+	auto [ptr, _] = std::from_chars(view.data(), view.data() + view.size(), start);
+	if (ptr == view.data()) {
+		return std::nullopt;
+	}
+	view.remove_prefix(ptr - view.data());
+	return std::optional(start);
+}
+
 std::expected<std::string, ErrType> 
 MacroTemplate::expand(ArgStack &args) const {
 	std::string out;
@@ -226,7 +215,8 @@ enum class ParserState {
 	ParsingScope,
 };
 
-std::expected<std::string, ErrType> parse(FileHandler &buf, MacroMap &map, ArgStack &stk) {
+std::expected<std::string, ErrType>
+parse(FileHandler &buf, MacroMap &map, ArgStack &stk) {
 	ParserState state = ParserState::Default;
 	Token tok;
 	TokBuf::ErrCode ec = buf.peek_front(tok, false);

@@ -19,12 +19,15 @@
 cmake_minimum_required(VERSION 3.21)
 
 add_executable(hmacro 
+	argparse.hpp
+	argparse.cpp
+	cli-handler.hpp
+	cli-handler.cpp
+	filehandler.hpp
+	filehandler.cpp
 	tokbuf.hpp
 	tokbuf.cpp
 	parser.cpp
 	parser.hpp
-	argparse.hpp
-	argparse.cpp
 	main.cpp
-	cli-handler.hpp
 )

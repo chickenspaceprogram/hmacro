@@ -84,7 +84,6 @@ class FileHandler {
 
 	private:
 	bool add_file_nonrelative(std::filesystem::path &&pth);
-	FileHandler() = default;
 	std::vector<FilePos> pos_stack;
 	TokBuf tbuf;
 };

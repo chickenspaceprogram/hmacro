@@ -1,6 +1,7 @@
 #pragma once
 
 #include "argparse.hpp"
+#include "parser.hpp"
 
 struct CliHandler {
 	static std::optional<CliHandler> parse(int argc, char **argv) {
@@ -45,3 +46,6 @@ struct CliHandler {
 	private:
 	CliHandler() {}
 };
+
+std::optional<MacroMap>
+get_init_macromap(std::span<std::string_view> macro_defs);

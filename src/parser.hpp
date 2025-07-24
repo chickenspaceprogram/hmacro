@@ -39,7 +39,8 @@ class ArgStack {
 using ErrType = std::vector<std::string>;
 
 struct MacroTemplate {
-	MacroTemplate(std::vector<MacroTemplateElem> &&arg, uint64_t nargs) : argslist(std::move(arg)), nargs(nargs) {}
+	MacroTemplate(std::vector<MacroTemplateElem> &&arg, uint64_t nargs)
+		: argslist(std::move(arg)), nargs(nargs) {}
 	std::expected<std::string, ErrType> expand(ArgStack &args) const;
 	private:
 	std::vector<MacroTemplateElem> argslist;
@@ -48,17 +49,24 @@ struct MacroTemplate {
 
 using MacroMap = std::unordered_map<std::string, MacroTemplate>;
 
-
-std::expected<std::string, ErrType> 
-parse(
-	FileHandler &buf, 
-	MacroMap &map
-);
-
 std::expected<std::string, ErrType>
-parse_file(
-	std::string_view prelude,
-	std::string_view epilogue,
-	const std::string &filname,
-	bool use_default_prelude
-);
+parse(FileHandler &buf, MacroMap &map, ArgStack &stk);
+
+inline bool is_macro_name(std::string_view nm) {
+	if (nm.size() < 1) {
+		return false;
+	}
+	if (!(std::isalpha(nm[0]) || nm[0] == '-' || nm[1] == '_')) {
+		return false;
+	}
+	return std::all_of(nm.begin(), nm.end(), 
+		[](char ch) -> bool {
+			return std::isalnum(ch) || ch == '-' || ch == '_';
+		}
+	);
+}
+
+std::expected<std::vector<MacroTemplateElem>, ErrType> 
+parse_def_args(std::string_view sub);
+
+std::optional<size_t> parse_int(std::string_view &view);
