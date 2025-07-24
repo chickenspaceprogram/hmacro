@@ -54,3 +54,11 @@ parse(
 	TokBuf &buf, 
 	MacroMap &map
 );
+
+std::expected<std::string, ErrType>
+parse_file(
+	std::string_view prelude,
+	std::string_view epilogue,
+	const std::string &filname,
+	bool use_default_prelude
+);

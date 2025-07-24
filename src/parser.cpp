@@ -300,3 +300,23 @@ std::expected<std::string, ErrType> parse(TokBuf &buf, MacroMap &map, ArgStack &
 	}
 	return outbuf;
 }
+
+namespace {
+
+const char INBUILT_PRELUDE[] = {
+#include "prelude.xxd.hm"
+};
+
+}
+
+std::expected<std::string, ErrType>
+parse_file(
+	std::string_view prelude,
+	std::string_view epilogue,
+	const std::string &filname,
+	bool use_default_prelude
+) {
+	TokBuf buf(filname);
+	buf.push_front(epilogue);
+	buf.push_front(prelude);
+}
