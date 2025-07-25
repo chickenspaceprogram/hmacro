@@ -24,8 +24,7 @@ void print_help() {
 << "-v, --version            - Print a version message, then exit\n"
 << "-h, --help               - Print a help message, then exit\n"
 << "-l, --license            - Display information about hmacro\'s license\n"
-<< "-P, --no-default-prelude - Disables the default Prelude and Epilogue.\n"
-<< "-E, --keep-esc           - Disables postprocessing of escaped characters\n\n"
+<< "-P, --no-default-prelude - Disables the default Prelude and Epilogue.\n\n"
 
 << "Options:\n\n"
 

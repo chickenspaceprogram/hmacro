@@ -1,6 +1,6 @@
 #include <array>
 #include <charconv>
-#include <algorithm>
+#include <iostream>
 #include "parser.hpp"
 
 
@@ -16,6 +16,50 @@ struct MacroCtx {
 using RetType = std::expected<std::string, ErrType>;
 using MacroFn = RetType (*)(MacroCtx ctx);
 
+template <typename T>
+std::expected<T, std::string>
+parse_single_int_arg(std::string_view arg, size_t argno, std::string_view macname) {
+	std::string_view txt = arg;
+	size_t num = txt.find_first_of("-0123456789");
+	T retval;
+	if (num == std::string_view::npos) {
+		std::string err = "Argument $" + std::to_string(argno) + " of macro ";
+		err += macname;
+		err += ", `";
+		err += arg;
+		err += "\' is not a number";
+		return std::unexpected(err);
+	}
+	auto [end, errcode] = std::from_chars(
+		arg.data() + num,
+		arg.data() + arg.size(),
+		retval
+	);
+	assert(end != arg.data() + num);
+	return retval;
+}
+
+template <typename T, size_t size>
+std::expected<std::array<T, size>, ErrType>
+parse_int_args(const ArgStack &args, std::string_view macname) {
+	ErrType es;
+	std::array<T, size> retval;
+	for (size_t i = 0; i < size; ++i) {
+		auto res = parse_single_int_arg<int64_t>(args[i], i, macname);
+		if (!res.has_value()) {
+			es.push_back(res.error());
+		}
+		else {
+			retval[i] = res.value();
+		}
+	}
+	if (!es.empty()) {
+		return std::unexpected(es);
+	}
+	return retval;
+}
+
+
 RetType def_fn(MacroCtx ctx) {
 	if (!is_macro_name(ctx.argstack[0])) {
 		ErrType es;
@@ -23,10 +67,10 @@ RetType def_fn(MacroCtx ctx) {
 		return std::unexpected(es);
 	}
 	std::string_view num_view = ctx.argstack[1];
-	auto nargs = parse_int(num_view);
+	auto nargs = parse_single_int_arg<size_t>(num_view, 1, "\\def");
 	if (!nargs.has_value()) {
 		ErrType es;
-		es.push_back("Non-numeric value provided as argument $1 of \\def");
+		es.push_back(nargs.error());
 		return std::unexpected(es);
 	}
 	auto defargs(parse_def_args(ctx.argstack[2]));
@@ -50,20 +94,18 @@ RetType include_fn(MacroCtx ctx) {
 }
 
 RetType if_fn(MacroCtx ctx) {
-	std::string_view st = ctx.argstack[0];
-	auto res = parse_int(st);
+	auto res = parse_single_int_arg<int64_t>(ctx.argstack[0], 0, "\\if");
 	if (!res.has_value()) {
 		ErrType es;
-		es.push_back("Failed to parse integer argument to macro \\if");
+		es.push_back(res.error());
 		return std::unexpected(es);
 	}
 	if (res.value()) {
-		ctx.buf.push_front(ctx.argstack[1]);
+		return std::move(ctx.argstack[1]);
 	}
 	else {
-		ctx.buf.push_front(ctx.argstack[2]);
+		return std::move(ctx.argstack[2]);
 	}
-	return "";
 }
 
 std::string num_to_argno(size_t num) {
@@ -85,7 +127,8 @@ RetType err_fn(MacroCtx ctx) {
 	return std::unexpected(es);
 }
 
-const std::array<std::pair<std::string_view, std::pair<size_t, MacroFn>>, 26> INBUILT_MACRO_ARR = {
+const std::array<std::pair<std::string_view, std::pair<size_t, MacroFn>>, 26>
+INBUILT_MACRO_ARR = {
 	std::make_pair("def", std::make_pair(3, def_fn)),
 	std::make_pair("undef", std::make_pair(1, [](MacroCtx ctx) -> RetType {
 		ctx.map.erase(std::string(ctx.argstack[0]));
@@ -94,27 +137,215 @@ const std::array<std::pair<std::string_view, std::pair<size_t, MacroFn>>, 26> IN
 	std::make_pair("include", std::make_pair(1, include_fn)),
 	std::make_pair("if", std::make_pair(3, if_fn)),
 	std::make_pair("error", std::make_pair(0, err_fn)),
-	std::make_pair("defined", std::make_pair(1, nullptr)),
-	std::make_pair("size", std::make_pair(0, nullptr)),
-	std::make_pair("suffix", std::make_pair(2, nullptr)),
-	std::make_pair("prefix", std::make_pair(2, nullptr)),
-	std::make_pair("len", std::make_pair(1, nullptr)),
-	std::make_pair("replace", std::make_pair(3, nullptr)),
-	std::make_pair("reverse", std::make_pair(1, nullptr)),
-	std::make_pair("find", std::make_pair(2, nullptr)),
-	std::make_pair("rfind", std::make_pair(2, nullptr)),
-	std::make_pair("findany", std::make_pair(2, nullptr)),
-	std::make_pair("rfindany", std::make_pair(2, nullptr)),
-	std::make_pair("findnone", std::make_pair(2, nullptr)),
-	std::make_pair("rfindnone", std::make_pair(2, nullptr)),
-	std::make_pair("eq", std::make_pair(2, nullptr)),
-	std::make_pair("streq", std::make_pair(2, nullptr)),
-	std::make_pair("gt", std::make_pair(2, nullptr)),
-	std::make_pair("nand", std::make_pair(2, nullptr)),
-	std::make_pair("isnum", std::make_pair(1, nullptr)),
-	std::make_pair("add", std::make_pair(2, nullptr)),
-	std::make_pair("mult", std::make_pair(2, nullptr)),
-	std::make_pair("div", std::make_pair(2, nullptr)),
+	std::make_pair("defined", std::make_pair(1, [](MacroCtx ctx) ->
+	RetType {
+		if (ctx.map.contains(ctx.argstack[0])) {
+			return "1";
+		}
+		return "0";
+	})),
+	std::make_pair("stacksize", std::make_pair(0, [](MacroCtx ctx) ->
+	RetType {
+		return std::to_string(ctx.argstack.size());
+	})),
+	std::make_pair("remove_prefix", std::make_pair(2, [](MacroCtx ctx) ->
+	RetType {
+		auto num_to_pop = parse_single_int_arg<size_t>(
+			ctx.argstack[0], 0, "\\remove_prefix"
+		);
+		if (!num_to_pop.has_value()) {
+			ErrType es;
+			es.push_back(num_to_pop.error());
+			return std::unexpected(es);
+		}
+		size_t pop_num = num_to_pop.value() > ctx.argstack[1].size() ?
+			ctx.argstack[1].size() :
+			num_to_pop.value();
+		std::string_view snd_arg = ctx.argstack[1];
+		snd_arg.remove_prefix(pop_num);
+		return std::string(snd_arg);
+	})),
+	std::make_pair("remove_suffix", std::make_pair(2, [](MacroCtx ctx) ->
+	RetType {
+		auto num_to_pop = parse_single_int_arg<size_t>(
+			ctx.argstack[0], 0, "\\remove_suffix"
+		);
+		if (!num_to_pop.has_value()) {
+			ErrType es;
+			es.push_back(num_to_pop.error());
+			return std::unexpected(es);
+		}
+		size_t pop_num = num_to_pop.value() > ctx.argstack[1].size() ?
+			ctx.argstack[1].size() :
+			num_to_pop.value();
+		std::string_view snd_arg = ctx.argstack[1];
+		snd_arg.remove_suffix(pop_num);
+		return std::string(snd_arg);
+	})),
+	std::make_pair("len", std::make_pair(1, [](MacroCtx ctx) -> RetType {
+		return std::to_string(ctx.argstack[0].size());
+	})),
+	std::make_pair("replace", std::make_pair(3, [](MacroCtx ctx) ->
+	RetType {
+		std::string outbuf;
+		std::string_view search_str = ctx.argstack[2];
+		size_t start_loc = search_str.find(ctx.argstack[0]);
+		while (start_loc != std::string_view::npos) {
+			outbuf += search_str.substr(0, start_loc);
+			outbuf += ctx.argstack[1];
+			search_str.remove_prefix(
+				start_loc + ctx.argstack[0].size()
+			);
+			start_loc = search_str.find(ctx.argstack[0]);
+		}
+		outbuf += search_str;
+		return outbuf;
+	})),
+	std::make_pair("reverse", std::make_pair(1, [](MacroCtx ctx) ->
+	RetType {
+		std::string out;
+		for (size_t i = 0; i < ctx.argstack[0].size(); --i) {
+			out += ctx.argstack[0][ctx.argstack[0].size() - i - 1];
+		}
+		return out;
+	})),
+	std::make_pair("find", std::make_pair(2, [](MacroCtx ctx) -> RetType {
+		size_t ind = ctx.argstack[1].find(ctx.argstack[0]);
+		if (ind == std::string_view::npos) {
+			ind = ctx.argstack[1].size();
+		}
+		return std::to_string(ind);
+	})),
+	std::make_pair("rfind", std::make_pair(2, [](MacroCtx ctx) ->
+	RetType {
+		size_t ind = ctx.argstack[1].rfind(ctx.argstack[0]);
+		if (ind == std::string_view::npos) {
+			ind = ctx.argstack[1].size();
+		}
+		return std::to_string(ind);
+	})),
+	std::make_pair("findany", std::make_pair(2, [](MacroCtx ctx) ->
+	RetType {
+		size_t ind = ctx.argstack[1].find_first_of(ctx.argstack[0]);
+		if (ind == std::string_view::npos) {
+			ind = ctx.argstack[1].size();
+		}
+		return std::to_string(ind);
+	})),
+	std::make_pair("rfindany", std::make_pair(2, [](MacroCtx ctx) ->
+	RetType {
+		size_t ind = ctx.argstack[1].find_last_of(ctx.argstack[0]);
+		if (ind == std::string_view::npos) {
+			ind = ctx.argstack[1].size();
+		}
+		return std::to_string(ind);
+	})),
+	std::make_pair("findnone", std::make_pair(2, [](MacroCtx ctx) ->
+	RetType {
+		size_t ind = ctx.argstack[1].find_first_not_of(ctx.argstack[0]);
+		if (ind == std::string_view::npos) {
+			ind = ctx.argstack[1].size();
+		}
+		return std::to_string(ind);
+	})),
+	std::make_pair("rfindnone", std::make_pair(2, [](MacroCtx ctx) ->
+	RetType {
+		size_t ind = ctx.argstack[1].find_last_not_of(ctx.argstack[0]);
+		if (ind == std::string_view::npos) {
+			ind = ctx.argstack[1].size();
+		}
+		return std::to_string(ind);
+	})),
+	std::make_pair("eq", std::make_pair(2, [](MacroCtx ctx) ->
+	RetType {
+		auto int_args = parse_int_args<int64_t, 2>(
+			ctx.argstack, "\\eq"
+		);
+		if (!int_args.has_value()) {
+			return std::unexpected(int_args.error());
+		}
+		if (int_args.value()[0] == int_args.value()[1]) {
+			return "1";
+		}
+		return "0";
+	})),
+	std::make_pair("streq", std::make_pair(2, [](MacroCtx ctx) ->
+	RetType {
+		if (ctx.argstack[0] == ctx.argstack[1]) {
+			return "1";
+		}
+		return "0";
+	})),
+	std::make_pair("gt", std::make_pair(2, [](MacroCtx ctx) ->
+	RetType {
+		auto int_args = parse_int_args<int64_t, 2>(
+			ctx.argstack, "\\gt"
+		);
+		if (!int_args.has_value()) {
+			return std::unexpected(int_args.error());
+		}
+		if (int_args.value()[0] > int_args.value()[1]) {
+			return "1";
+		}
+		return "0";
+	})),
+	std::make_pair("nand", std::make_pair(2, [](MacroCtx ctx) ->
+	RetType {
+		auto int_args = parse_int_args<int64_t, 2>(
+			ctx.argstack, "\\nand"
+		);
+		if (!int_args.has_value()) {
+			return std::unexpected(int_args.error());
+		}
+		if (int_args.value()[0] && int_args.value()[1]) {
+			return "0";
+		}
+		return "1";
+	})),
+	std::make_pair("isnum", std::make_pair(1, [](MacroCtx ctx) ->
+	RetType {
+		auto int_args = parse_int_args<int64_t, 1>(
+			ctx.argstack, "\\isnum"
+		);
+		if (int_args.has_value()) {
+			return "1";
+		}
+		return "0";
+	})),
+	std::make_pair("add", std::make_pair(2, [](MacroCtx ctx) ->
+	RetType {
+		auto int_args = parse_int_args<int64_t, 2>(
+			ctx.argstack, "\\add"
+		);
+		if (!int_args.has_value()) {
+			return std::unexpected(int_args.error());
+		}
+		return std::to_string(
+			int_args.value()[0] + int_args.value()[1]
+		);
+	})),
+	std::make_pair("mult", std::make_pair(2, [](MacroCtx ctx) -> RetType {
+		auto int_args = parse_int_args<int64_t, 2>(
+			ctx.argstack, "\\mult"
+		);
+		if (!int_args.has_value()) {
+			return std::unexpected(int_args.error());
+		}
+		return std::to_string(
+			int_args.value()[0] * int_args.value()[1]
+		);
+	})),
+	std::make_pair("div", std::make_pair(2, [](MacroCtx ctx) -> RetType {
+		auto int_args = parse_int_args<int64_t, 2>(
+			ctx.argstack, "\\div"
+		);
+		if (!int_args.has_value()) {
+			return std::unexpected(int_args.error());
+		}
+		return std::to_string(
+			int_args.value()[0] / int_args.value()[1]
+		);
+	})),
 };
 const std::unordered_map<std::string_view, std::pair<size_t, MacroFn>> 
 	INBUILT_MACRO_MAP(INBUILT_MACRO_ARR.begin(), INBUILT_MACRO_ARR.end());
@@ -142,8 +373,8 @@ parse_def_args(std::string_view sub) {
 		}
 		if (i != 0) {
 			argvec.push_back(MacroTemplateElem(std::string(sub.substr(0, i))));
-			sub.remove_prefix(i + 1);
 		}
+		sub.remove_prefix(i + 1);
 		auto result(parse_int(sub));
 		if (!result.has_value()) {
 			ErrType es;
@@ -176,7 +407,11 @@ MacroTemplate::expand(ArgStack &args) const {
 		}
 		else if (args.size() < std::get<1>(elem)) {
 			ErrType es;
-			es.push_back("Stack underflow: Attempted to access value `" + num_to_argno(std::get<1>(elem)) + "\', which was not present in the stack");
+			es.push_back(
+				"Stack underflow: Attempted to access value `"
+				+ num_to_argno(std::get<1>(elem))
+				+ "\', which was not present in the stack"
+			);
 			return std::unexpected(es);
 		}
 		else {

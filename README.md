@@ -18,7 +18,6 @@ Flags:
 -h, --help               - Print a help message, then exit
 -l, --license            - Display information about hmacro's license
 -P, --no-default-prelude - Disables the default Prelude and Epilogue.
--E, --keep-esc           - Disables postprocessing of escaped characters
 
 Options:
 
@@ -198,7 +197,6 @@ The following characters can be escaped:
 
 ~~~
 \
-\n
 $
 {
 }
@@ -206,7 +204,8 @@ $
 ]
 ~~~
 
-If `\n` is escaped, it expands to nothing. This allows for adding lines to
+If a whitespace character is escaped, it and every whitespace character
+directly following it expand to nothing. This allows for adding lines to
 files that won't expand to anything. This is useful for defining macros, since
 you may not want spurious empty lines in your final output.
 
@@ -268,16 +267,16 @@ Each only pops and/or accesses each of the arguments shown off the stack.
     - Expands to `1` if `name` is the name of a defined macro or builtin.
       Otherwise, expands to `0`.
     - `name` : The macro name to check.
-- `\size`
+- `\stacksize`
     - Expands to the current number of elements on the stack.
-- `\suffix{n}{txt}`
+- `\remove_prefix{n}{txt}`
     - Expands to `txt`, without the first `n` bytes. 
       Effectively, if `txt` is `len` bytes long, it is turned into the
       substring `[n, len)`.
       If `n` is larger than the number of bytes in `txt`, expands to nothing.
     - `n` : number of characters to remove
     - `txt` : string to find the suffix of
-- `\prefix{n}{txt}`
+- `\remove_suffix{n}{txt}`
     - Expands to `txt`, without the last `n` bytes.
       Effectively, if `txt` is `len` bytes long, it is turned into the
       substring `[0, len - n)`.
@@ -350,9 +349,11 @@ Each only pops and/or accesses each of the arguments shown off the stack.
       Otherwise, expands to 0, and terminates with an error if
       `arg1` or `arg2` are not numbers.
 - `\add{num1}{num2}`
-    - Adds 
+    - Expands to the sum of num1 + num2
 - `\mult{num1}{num2}`
+    - Expands to the product of num1 * num2
 - `\div{num1}{num2}`
+    - Expands to the integer quotient of num1 / num2
 
 ### Prelude
 

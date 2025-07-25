@@ -9,12 +9,22 @@ bool check_esc(std::string_view view) {
 	return view.size() >= 2 && view[0] == '\\' && (
 		view[1] == '\\' ||
 		view[1] == '\n' ||
+		view[1] == ' ' ||
+		view[1] == '\t' ||
+		view[1] == '\v' ||
 		view[1] == '$' ||
 		view[1] == '{' ||
 		view[1] == '}' ||
 		view[1] == '[' ||
 		view[1] == ']'
 	);
+}
+size_t find_fst_nonesc(std::string_view view) {
+	size_t res = view.find_first_not_of("\n \t\v", 2);
+	if (res == std::string_view::npos) {
+		res = view.size();
+	}
+	return res;
 }
 
 std::optional<Token> try_parse_macro(std::string_view view) {
@@ -74,7 +84,16 @@ Token parse_text(std::string_view view) {
 			return Token {.type = Token::Txt, .elem = view};
 		}
 		if (check_esc(view.substr(ind))) {
-			ind += 2;
+			if (
+				view[ind + 1] == '\n' ||
+				view[ind + 1] == '\t' ||
+				view[ind + 1] == '\v' ||
+				view[ind + 1] == ' '
+			) {
+				// trim newlines
+				return Token {.type = Token::Txt, .elem = view.substr(0, ind)};
+			}
+			ind += find_fst_nonesc(view.substr(ind));
 		}
 		else {
 			return Token {.type = Token::Txt, .elem = view.substr(0, ind)};
@@ -166,10 +185,13 @@ std::string remove_escs(std::string_view view) {
 		outbuf += view.substr(0, esc_loc);
 		view.remove_prefix(esc_loc);
 		if (check_esc(view)) {
-			if (view[1] != '\n') {
-				outbuf += view[1];
+			if (view[1] == '\n' || view[1] == ' ' || view[1] == '\t' || view[1] == '\v') {
+				view.remove_prefix(find_fst_nonesc(view));
 			}
-			view.remove_prefix(2);
+			else {
+				outbuf += view[1];
+				view.remove_prefix(2);
+			}
 		}
 		else {
 			outbuf += view.substr(0, 2);
