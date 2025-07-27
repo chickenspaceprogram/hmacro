@@ -136,6 +136,7 @@ bool FileHandler::add_file_nonrelative(std::filesystem::path &&pth) {
 }
 
 void FileHandler::pop_front(size_t amt) {
+	assert(amt <= tbuf.size());
 	auto res = pos_stack.back().increment_pos(tbuf, amt);
 	while (res.has_value()) {
 		pos_stack.pop_back();

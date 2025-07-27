@@ -8,10 +8,6 @@ namespace {
 bool check_esc(std::string_view view) {
 	return view.size() >= 2 && view[0] == '\\' && (
 		view[1] == '\\' ||
-		view[1] == '\n' ||
-		view[1] == ' ' ||
-		view[1] == '\t' ||
-		view[1] == '\v' ||
 		view[1] == '$' ||
 		view[1] == '{' ||
 		view[1] == '}' ||
@@ -19,14 +15,6 @@ bool check_esc(std::string_view view) {
 		view[1] == ']'
 	);
 }
-size_t find_fst_nonesc(std::string_view view) {
-	size_t res = view.find_first_not_of("\n \t\v", 2);
-	if (res == std::string_view::npos) {
-		res = view.size();
-	}
-	return res;
-}
-
 std::optional<Token> try_parse_macro(std::string_view view) {
 	if (
 		view.size() < 2 || 
@@ -84,16 +72,7 @@ Token parse_text(std::string_view view) {
 			return Token {.type = Token::Txt, .elem = view};
 		}
 		if (check_esc(view.substr(ind))) {
-			if (
-				view[ind + 1] == '\n' ||
-				view[ind + 1] == '\t' ||
-				view[ind + 1] == '\v' ||
-				view[ind + 1] == ' '
-			) {
-				// trim newlines
-				return Token {.type = Token::Txt, .elem = view.substr(0, ind)};
-			}
-			ind += find_fst_nonesc(view.substr(ind));
+			ind += 2;
 		}
 		else {
 			return Token {.type = Token::Txt, .elem = view.substr(0, ind)};
@@ -111,13 +90,17 @@ TokBuf::ErrCode TokBuf::peek_front(Token &tok, bool parse_scope) const {
 		tok = parse_text(get_view());
 		return ErrCode::Ok; // escchr, parse as txt
 	}
-	std::optional<Token> res = try_parse_macro(get_view());
-	if (res.has_value()) {
-		tok = res.value();
-		return ErrCode::Ok;
+	if (get_view().size() >= 1 && get_view()[0] == '\\') {
+		std::optional<Token> res = try_parse_macro(get_view());
+		if (res.has_value()) {
+			tok = res.value();
+			return ErrCode::Ok;
+		}
+		tok.elem = "Invalid macro call";
+		return ErrCode::Err;
 	}
 	if (parse_scope && size() >= 2 && buf[fst_index] == '{') {
-		res = try_parse_scope(get_view());
+		std::optional<Token> res = try_parse_scope(get_view());
 		if (res.has_value()) {
 			tok = res.value();
 			return ErrCode::Ok;
@@ -145,6 +128,33 @@ void TokBuf::push_front(std::string_view elem) {
 	if (elem.size() == 0) {
 		return;
 	}
+	size_t last_bslash = elem.find_last_of('\\');
+	if (elem.find_first_not_of(" \n\t\v", last_bslash + 1) == std::string_view::npos) {
+		elem.remove_suffix(elem.size() - last_bslash);
+		std::string_view buf_view(buf.get() + fst_index, total_size - fst_index);
+		size_t fst_non_wspace = buf_view.find_first_not_of(" \n\t\v");
+		if (fst_non_wspace == std::string_view::npos) {
+			fst_non_wspace = size();
+		}
+		pop_front(fst_non_wspace);
+
+		last_bslash = elem.find_last_of('\\');
+	}
+	while (last_bslash != std::string_view::npos) {
+		size_t end_nl_esc = elem.find_first_not_of(" \n\t\v", last_bslash + 1);
+		if (end_nl_esc == last_bslash + 1) {
+			push_front_unsafe(elem.substr(last_bslash));
+		}
+		else if (end_nl_esc != std::string_view::npos) {
+			push_front_unsafe(elem.substr(end_nl_esc));
+		}
+		elem.remove_suffix(elem.size() - last_bslash);
+		last_bslash = elem.find_last_of('\\');
+	}
+	push_front_unsafe(elem);
+}
+
+void TokBuf::push_front_unsafe(std::string_view elem) {
 	reserve(size() + elem.size());
 	fst_index -= elem.size();
 	std::memcpy(&buf[fst_index], elem.data(), elem.size());
@@ -156,8 +166,14 @@ bool TokBuf::push_from_istream(std::istream &stream, size_t num_to_push) {
 	}
 	reserve(size() + num_to_push);
 	fst_index -= num_to_push;
-	stream.read(&buf[fst_index], num_to_push);
-	return num_to_push == (size_t)stream.gcount();
+	std::unique_ptr<char []> tmp_buf = std::make_unique<char []>(num_to_push);
+	stream.read(tmp_buf.get(), num_to_push);
+	if (num_to_push == (size_t)stream.gcount()) {
+		std::string_view view(tmp_buf.get(), num_to_push);
+		push_front(view);
+		return true;
+	}
+	return false;
 }
 
 void TokBuf::reserve(size_t amt) {
@@ -185,13 +201,8 @@ std::string remove_escs(std::string_view view) {
 		outbuf += view.substr(0, esc_loc);
 		view.remove_prefix(esc_loc);
 		if (check_esc(view)) {
-			if (view[1] == '\n' || view[1] == ' ' || view[1] == '\t' || view[1] == '\v') {
-				view.remove_prefix(find_fst_nonesc(view));
-			}
-			else {
-				outbuf += view[1];
-				view.remove_prefix(2);
-			}
+			outbuf += view[1];
+			view.remove_prefix(2);
 		}
 		else {
 			outbuf += view.substr(0, 2);

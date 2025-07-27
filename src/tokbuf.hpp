@@ -69,6 +69,7 @@ class TokBuf {
 
 	private:
 
+	void push_front_unsafe(std::string_view elem);
 	std::unique_ptr<char []> buf;
 	size_t fst_index = 0;
 	size_t total_size = 0;
