@@ -40,7 +40,11 @@ pub enum MacroAst {
 }
 
 pub fn parse_txt(txt: &str) -> Vec<MacroAst> {
-    parse(tokenize(txt).as_ref()).iter().map(|tr| convert(tr)).collect()
+    let toks = tokenize(txt);
+//    eprintln!("toks: {:?}", toks);
+    let res = parse(toks.as_ref()).iter().map(|tr| convert(tr)).collect();
+//    eprintln!("parsed: {:?}", res);
+    res
 }
 
 fn convert(toktree: &TokenTree) -> MacroAst {
@@ -80,9 +84,12 @@ fn parse_scope<'a, 'b>(toks: &'b [(usize, usize, Token<'a>)]) -> Option<(TokenTr
         return None;
     }
     if let (row, col, Token::LBrack) = toks[0] {
+        if toks.len() < 2 {
+            return Some((TokenTree::Error(row, col, "Open bracket followed by end of file"), &toks[1..]));
+        }
         let (tok, rest) = parse_internal(&toks[1..]);
         if tok.len() == 0 {
-            return Some((TokenTree::Error(row, col, "Open bracket followed by end of file"), rest));
+            return Some((TokenTree::Scope(row, col, Vec::new()), &rest[1..]));
         }
         if rest.len() == 0 {
             return Some((TokenTree::Error(row, col, "Failed to find closing bracket"), &toks[1..]))
@@ -113,6 +120,7 @@ fn grab_tok<'a, 'b>(toks: &'b [(usize, usize, Token<'a>)]) -> (TokenTree<'a>, &'
                 tokvec.push(tok);
                 tokslice = rest;
             }
+//            eprintln!("macro-tokvec: name: {:?}, args: {:?}", nm, tokvec);
             (TokenTree::Macro(row, col, nm, tokvec), tokslice)
         },
     }

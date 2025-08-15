@@ -140,11 +140,16 @@ pub fn expand_new_file(path: &Path) -> Result<String, ErrType> {
 
 pub fn expand_file(path: &Path, macro_map: &mut HashMap<String, Vec<MacroAst>>) -> Result<String, ErrType> {
     match fs::read_to_string(path) {
-        Ok(txt) => Ok(concat_all(
-            parse_txt(txt.as_str()).iter()
-                                   .map(|ast| expand(ast, macro_map, path))
-                                   .collect::<Result<Vec<_>,_>>()?
-        )),
+        Ok(txt) => {
+            let res = Ok(concat_all(
+                parse_txt(txt.as_str())
+                    .iter()
+//                    .map(|ast| {eprintln!("expand_file ast: {:?}", ast); ast})
+                    .map(|ast| expand(ast, macro_map, path))
+                    .collect::<Result<Vec<_>,_>>()?
+            ));
+            return res;
+        },
         Err(e) => Err((0, 0, e.to_string(), path.to_path_buf())),
     }
 }
@@ -161,7 +166,7 @@ fn expand(ast: &MacroAst, macro_map: &mut HashMap<String, Vec<MacroAst>>, path: 
             if let Some(expansion) = macro_map.clone().get(name) { // bad and cringe
                 return expand_macro(expansion, args, macro_map, path);
             }
-            Err((*r, *c, "Macro `".to_string() + name.as_str() + "\' undefined", path.to_path_buf()))
+            Err((*r, *c, format!("Macro `{}\' undefined", name.as_str()), path.to_path_buf()))
         },
         MacroAst::Scope(_, _, chld) => {
             chld.iter()
