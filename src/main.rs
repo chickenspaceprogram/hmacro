@@ -31,7 +31,7 @@ fn print_err(e: &expand::ErrType) {
 
 fn print_version() {
     println!("
-    hmacro v2.2.1, Copyright (C) 2025 Athena Boose
+    hmacro v2.2.2, Copyright (C) 2025 Athena Boose
 
     This program comes with ABSOLUTELY NO WARRANTY.
     This is free software, and you are welcome to redistribute it

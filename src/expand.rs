@@ -57,22 +57,24 @@ fn include_macro(info: MacroInfo, macro_map: &mut HashMap<String, Vec<MacroAst>>
         return Err((row, col, "\\include macro requires at least 1 argument".to_string(), path.to_path_buf()))
     }
     let filename = expand(&args[0], macro_map, path)?;
-    let mut newpath = path.to_path_buf();
-    newpath.pop();
+    let mut newpath = path.parent().unwrap_or(path).to_path_buf();
     newpath.push(filename);
+    match std::fs::exists(&newpath) {
+        Ok(false) => return Err((row, col, 
+            format!("no such file or directory `{}\'", 
+                newpath
+                    .into_os_string()
+                    .into_string()
+                    .unwrap_or("[filename contains non-unicode characters]".to_string())
+                ), path.to_path_buf())),
+        Ok(true) => (),
+        Err(e) => return Err((row, col, e.to_string(), path.to_path_buf())),
+    }
     expand_file(newpath.as_path(), macro_map)
 }
 
 fn incldefs_macro(info: MacroInfo, macro_map: &mut HashMap<String, Vec<MacroAst>>, path: &Path) -> Result<String, ErrType> {
-    let (row, col, args) = info;
-    if args.len() < 1 {
-        return Err((row, col, "\\incldefs macro requires at least 1 argument".to_string(), path.to_path_buf()))
-    }
-    let filename = expand(&args[0], macro_map, path)?;
-    let mut newpath = path.to_path_buf();
-    newpath.pop();
-    newpath.push(filename);
-    expand_file(newpath.as_path(), macro_map)?;
+    include_macro(info, macro_map, path)?;
     Ok(String::new())
 }
 
