@@ -23,6 +23,7 @@ use std::collections::HashMap;
 mod lexer;
 mod parser;
 pub mod expand;
+pub mod tokbuf;
 
 fn print_err(e: &expand::ErrType) {
     let (row, col, msg, path) = e;
