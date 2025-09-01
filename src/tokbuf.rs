@@ -1,14 +1,44 @@
-
-struct FrontGrowingBuf {
+use std::sync::LazyLock;
+use std::path::PathBuf;
+use regex::bytes;
+pub struct FrontGrowingBuf {
     buf: Box<[u8]>,
     fst: usize,
 }
 
-fn alloc_boxed_slice<T: Clone>(nel: usize, default_val: &T) -> Box<[T]> {
-    vec![default_val.clone(); nel].into_boxed_slice()
+pub struct LocationInfo {
+    file_path: PathBuf,
+    row: usize,
+    col: usize,
 }
 
-impl FrontGrowingBuf {
+struct LocationTag {
+    loc: LocationInfo,
+    // number of bytes that must be popped to get to `loc`
+    ignored_bytes: usize,
+}
+
+
+pub struct TokBuf {
+    buf: FrontGrowingBuf,
+    fname_stack: Vec<(LocationInfo, usize)>,
+}
+
+fn alloc_boxed_slice<T: Copy>(nel: usize, default_val: &T) -> Box<[T]> {
+    vec![*default_val; nel].into_boxed_slice()
+}
+
+static macro_regex: LazyLock<bytes::Regex> = LazyLock::new(||
+    bytes::Regex::new(r"\[[:space:]]*([a-zA-Z_][[:word:]]*)").unwrap()
+);
+
+static esc_ws_regex: LazyLock<bytes::Regex> = LazyLock::new(||
+    bytes::Regex::new("\\\n[[:space:]]*").unwrap()
+);
+
+const esc_chrs: [u8; 6] = [b'\\', b'$', b'{', b'}', b'[', b']'];
+
+impl<'a> FrontGrowingBuf {
     pub fn new() -> Self {
         FrontGrowingBuf {
             buf: Box::new([]),
@@ -46,20 +76,73 @@ impl FrontGrowingBuf {
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
         &mut self.buf[self.fst..]
     }
-    pub fn peek_tok(&self) -> Option<&[u8]> {
-        let buf = self.as_slice();
-        if buf.len() == 0 {
-            return None;
+}
+
+impl<'a> TokBuf {
+}
+
+pub fn peek_tok<'a>(buf: &'a [u8], want_scope: bool) -> Option<(Token<'a>, usize)> {
+    if buf.len() == 0 {
+        return None;
+    }
+    if let Some(m) = esc_ws_regex.find(buf) {
+        return Some((Token::EscWs, m.len()));
+    }
+    if buf.len() >= 2 && buf[0] == b'\\' && esc_chrs.contains(&buf[1]) {
+        return Some((Token::EscChr(buf[1]), 2));
+    }
+    if let Some(caps) = macro_regex.captures(buf) {
+        let res = caps.get(1).unwrap();
+        return Some((Token::Macro(&buf[res.start()..res.end()]), caps.get(0).unwrap().len()));
+    }
+    if want_scope {
+        if buf[0] == b'[' {
+            return Some((Token::BeginGreedyScope, 1));
         }
-        if buf[0] == '\\' {
+        if buf[0] == b']' {
+            return Some((Token::EndGreedyScope, 1));
         }
+        if buf[0] == b'{' {
+            if let Some(res) = match_brack(buf) {
+                return Some((Token::LazyScope(&buf[1..res - 1]), res));
+            }
+            return Some((Token::Error("Unmatched bracket".to_string()), 0));
+        }
+    }
+    if let Some(esc) = memchr::memchr(b'\\', buf) {
+        return Some((Token::Text(&buf[..esc]), esc));
+    }
+    else {
+        return Some((Token::Text(buf), buf.len()));
     }
 }
 
-enum Token<'a> {
+
+fn match_brack(slice: &[u8]) -> Option<usize> {
+    assert!(slice.len() > 0 && slice[0] == b'{', "Bad slice passed to match_brack()");
+    let mut brack_count = 0;
+    for brack in memchr::memchr2_iter(b'{', b'}', slice) {
+        match slice[brack] {
+            b'{' => brack_count += 1,
+            b'}' => {
+                brack_count -= 1;
+                if brack_count == 0 {
+                    return Some(brack + 1);
+                }
+            },
+            _ => panic!("memchr caused an error"),
+        }
+    }
+    return None;
+}
+
+pub enum Token<'a> {
     Macro(&'a [u8]),
-    Text,
+    Text(&'a [u8]),
+    BeginGreedyScope,
+    EndGreedyScope,
     LazyScope(&'a [u8]),
-    GreedyScope(&'a [u8]),
-    Error(usize),
+    EscChr(u8),
+    EscWs,
+    Error(String),
 }

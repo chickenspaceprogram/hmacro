@@ -26,3 +26,7 @@ license = "GPL-3.0-or-later"
 keywords = ["preprocessor", "macro", "compiler"]
 categories = ["compilers"]
 
+[dependencies]
+memchr = "2.7.5"
+regex = "1.11.2"
+
