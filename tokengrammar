@@ -1,0 +1,7 @@
+macro = MACROSPEC MACRONAME+
+lscope = LSCOPEBEGIN any* LSCOPEEND
+number = NUMERIC*
+argno = ARGSPEC number
+quotearg = ARGSPEC LSCOPEBEGIN any* LSCOPEEND
+exparg = ARGSPEC ESCOPEBEGIN any* ESCOPEEND
+

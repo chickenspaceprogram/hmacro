@@ -47,12 +47,25 @@ impl ChrMap {
     }
 }
 
+impl std::ops::Index<u8> for ChrMap {
+    type Output = ChrType;
+    fn index(&self, item: u8) -> &Self::Output {
+        return &self.chrs[usize::from(item)];
+    }
+}
+
+fn consume_ws(buf: &mut &[u8], map: &ChrMap) {
+    while buf.len() > 0 && map[buf[0]] == ChrType::Whitespace {
+        *buf = &buf[1..];
+    }
+}
+
 // takes in a buffer and a chrmap and attempts to recognize and parse a macro
 fn parse_macro<'a>(buf: &mut &'a [u8], map: &ChrMap) -> Option<&'a [u8]> {
     if (*buf).len() == 0 {
         return None;
     }
-    if map.chrs[usize::from((*buf)[0])] != ChrType::MacroSpec {
+    if map[buf[0]] != ChrType::MacroSpec {
         return None;
     }
     let mut ind: usize = 1;
@@ -61,15 +74,125 @@ fn parse_macro<'a>(buf: &mut &'a [u8], map: &ChrMap) -> Option<&'a [u8]> {
         ind += 1;
     }
     let start_macro_name_ind = ind;
-    while let ChrType::MacroName = map.chrs[usize::from(buf[ind])] && ind < (*buf).len() {
+    while let ChrType::MacroName = map[buf[ind]] && ind < (*buf).len() {
         ind += 1;
     }
     if start_macro_name_ind == ind {
         return None; // fst macro char wasn't valid
     }
-    return Some(&(*buf)[start_macro_name_ind..ind]);
+    let res = Some(&(*buf)[start_macro_name_ind..ind]);
+    *buf = &buf[ind..];
+    return res;
 }
 
-fn parse_lazyscope<'a>(buf: &mut &'a [u8], map: &ChrMap) -> Option<&'a [u8]> {
-    todo!()
+fn parse_generic_scope<'a>(buf: &mut &'a [u8], map: &ChrMap, scp_begin: ChrType, scp_end: ChrType) -> Option<&'a [u8]> {
+    if (*buf).len() == 0 {
+        return None;
+    }
+    if map[buf[0]] != scp_begin {
+        return None;
+    }
+    let mut nbrack: usize = 0;
+    for ind in 0..buf.len() {
+        if map[buf[ind]] == scp_begin {
+            nbrack += 1;
+        }
+        if map[buf[ind]] == scp_end {
+            nbrack -= 1;
+        }
+        if nbrack == 0 {
+            let res = Some(&buf[1..ind - 1]);
+            *buf = &buf[ind..];
+            return res;
+        }
+    }
+    return None;
+}
+
+fn parse_quoter<'a>(buf: &mut &'a [u8], map: &ChrMap) -> Option<&'a [u8]> {
+    if (*buf).len() == 0 {
+        return None;
+    }
+    if map[buf[0]] != ChrType::ArgSpec {
+        return None;
+    }
+    let mut tmpbuf = &buf[1..];
+    let res = parse_generic_scope(&mut tmpbuf, map, ChrType::LazyBrackBegin, ChrType::LazyBrackEnd)?;
+    *buf = tmpbuf;
+    return Some(res);
+}
+
+fn parse_expander<'a>(buf: &mut &'a [u8], map: &ChrMap) -> Option<&'a [u8]> {
+    if (*buf).len() == 0 {
+        return None;
+    }
+    if map[buf[0]] != ChrType::ArgSpec {
+        return None;
+    }
+    let mut tmpbuf = &buf[1..];
+    let res = parse_generic_scope(&mut tmpbuf, map, ChrType::GreedyBrackBegin, ChrType::GreedyBrackEnd)?;
+    *buf = tmpbuf;
+    return Some(res);
+}
+fn parse_scope_tok<'a>(buf: &mut &'a [u8], map: &ChrMap) -> Option<&'a [u8]> {
+    return parse_generic_scope(buf, map, ChrType::LazyBrackBegin, ChrType::LazyBrackEnd);
+}
+
+fn parse_integer(buf: &mut &[u8]) -> Option<i64> {
+    // rust doesnt have decent ascii-non-utf8 parsing routines ;-;
+    if buf.len() == 0 {
+        return None;
+    }
+    let mut tmp_slice = *buf;
+    let is_negative: bool;
+    if buf[0] == b'-' {
+        is_negative = true;
+        tmp_slice = &tmp_slice[1..];
+    }
+    else if buf[0] == b'+' {
+        is_negative = false;
+        tmp_slice = &tmp_slice[1..];
+    }
+    else {
+        is_negative = false;
+    }
+    let mut num: i64 = 0;
+    for ind in 0..tmp_slice.len() {
+        if !buf[ind].is_ascii_digit() {
+            if ind == 0 {
+                return None;
+            }
+            else {
+                *buf = &tmp_slice[ind..];
+                if is_negative {
+                    return Some(-num);
+                }
+                return Some(num);
+            }
+        }
+        num += i64::from(buf[ind] - b'0');
+        num *= 10;
+    }
+    if tmp_slice.len() == 0 {
+        return None;
+    }
+    *buf = &tmp_slice[tmp_slice.len()..];
+    if is_negative {
+        return Some(-num);
+    }
+    return Some(num);
+}
+
+fn parse_dolexpr(buf: &mut &[u8], map: &ChrMap) -> Option<i64> {
+    if buf.len() == 0 {
+        return None;
+    }
+    if map[buf[0]] != ChrType::ArgSpec {
+        return None;
+    }
+    let mut tmpbuf = &buf[1..];
+    let res = parse_integer(&mut tmpbuf)?;
+    *buf = tmpbuf;
+    return Some(res);
+
 }
