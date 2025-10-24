@@ -1,5 +1,5 @@
-# hmacro - a macro preprocessor
-# Copyright (C) 2025 Athena Boose 
+# <one line to give the program's name and a brief idea of what it does.>
+# Copyright (C) <year>  <name of author>
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,13 +16,12 @@
 
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-[package]
-name = "hmacro"
-version = "2.2.2"
-edition = "2024"
-description = "A simple macro preprocessor"
-repository = "https://github.com/chickenspaceprogram/hmacro"
-license = "GPL-3.0-or-later"
-keywords = ["preprocessor", "macro", "compiler"]
-categories = ["compilers"]
+cmake_minimum_required(VERSION 3.21)
+project(hmacro C)
+
+set(CMAKE_C_STANDARD 23)
+
+include(CTest)
+add_subdirectory(src)
+
 
