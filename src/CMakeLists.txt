@@ -17,19 +17,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 cmake_minimum_required(VERSION 3.21)
-project(hmacro C)
 
-set(CMAKE_C_STANDARD 23)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-include(CTest)
-add_subdirectory(src)
-
-include(FetchContent)
-FetchContent_Declare(
-	CUtils
-	GIT_REPOSITORY https://github.com/chickenspaceprogram/c-utils
-	GIT_TAG 0.5.0
+add_library(hmacro-lib
+	hmacro.c
+	tlit.c
 )
 
-FetchContent_MakeAvailable(CUtils)
+target_link_libraries(hmacro-lib PUBLIC CUtils)
