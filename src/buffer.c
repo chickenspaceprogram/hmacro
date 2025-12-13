@@ -16,5 +16,5 @@
 
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "parser.h"
-int main(void) {}
+#include "buffer.h"
+
