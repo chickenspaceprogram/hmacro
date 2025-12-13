@@ -1,0 +1,30 @@
+specify a new type with
+
+\typedef !chr !scope !a_new_type
+
+this means that !a_new_type is composed of a !chr followed by a !scope.
+
+\typedef !chr|scope !another_new_type 
+
+this means that !another_new_type is either a chr or a scope
+
+predefined types:
+
+!chr		- single characters (escaped or not)
+!qscope		- quote scope
+!escope		- expander scope
+!macro		- macro
+!typespec	- type specifier
+!numeric	- number
+!any		- any type
+\typedef !scope !qscope|escope		- either scope type
+\typedef !macroarg !scope|chr|macro	- "traditional" macro arguments
+
+to restrict a macro to only taking specific types:
+\def \foo1 !chr !scope { ...whatever }
+
+familiar regex operators work too:
+\def \another_def_macro !typespec* !macroarg
+
+any args with unspecified type will take type !any
+

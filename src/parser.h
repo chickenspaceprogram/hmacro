@@ -2,14 +2,14 @@
 #include <cu/string.h>
 
 enum {
-	HMACRO_TOK_MACRO,
-	HMACRO_TOK_SCOPE,
-	HMACRO_TOK_EXPANDER,
-	HMACRO_TOK_QUOTER,
-	HMACRO_TOK_TEXT,
-	HMACRO_TOK_WS,
+	HM_TOK_MACRO,
+	HM_TOK_SCOPE,
+	HM_TOK_EXPANDER,
+	HM_TOK_QUOTER,
+	HM_TOK_TEXT,
+	HM_TOK_WS,
 
 };
 typedef struct {
 	cu_string_view txt;
-} hmacro_input_token;
+} hm_input_token;
