@@ -18,12 +18,11 @@
 
 cmake_minimum_required(VERSION 3.21)
 
-add_library(hmacro-lib
-	hmacro.c
-	tlit.c
-	buffer.c
+add_executable(buffer-test test-buffer.c)
+target_link_libraries(buffer-test PRIVATE hmacro-lib)
+
+add_test(
+	NAME buffer-test
+	COMMAND $<TARGET_FILE:buffer-test>
 )
 
-target_link_libraries(hmacro-lib PUBLIC CUtils)
-
-add_subdirectory(tests)

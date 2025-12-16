@@ -43,7 +43,7 @@ static inline int hm_buf_push(hm_buf *buf, cu_string_view txt, cu_alloc *alloc)
 {
 	if (txt.buf == NULL)
 		return 0;
-	int retval = hm_buf_reserve(buf, buf->capacity - buf->start + 1, alloc);
+	int retval = hm_buf_reserve(buf, buf->capacity - buf->start + txt.len, alloc);
 	if (retval != 0)
 		return retval;
 	buf->start -= txt.len;

@@ -38,6 +38,8 @@ int hm_buf_reserve(hm_buf *buf, uint64_t nchrs, cu_alloc *alloc)
 	uint64_t next_cap = next_pwr_2(nchrs);
 	if (next_cap <= buf->capacity)
 		return 0;
+	if (next_cap < MIN_CAPACITY)
+		next_cap = MIN_CAPACITY;
 	uint8_t *new_buf = cu_malloc(next_cap, alloc);
 	if (new_buf == NULL)
 		return -1;
@@ -54,7 +56,13 @@ int hm_taglist_reserve(hm_taglist *tl, uint64_t ntags, cu_alloc *alloc)
 	uint64_t next_cap = next_pwr_2(ntags);
 	if (next_cap <= tl->capacity)
 		return 0;
-	hm_tag *new_buf = cu_reallocarray(tl->buf, next_cap, tl->capacity, sizeof(hm_tag), alloc);
+	hm_tag *new_buf = cu_reallocarray(
+		tl->buf,
+		next_cap,
+		tl->capacity,
+		sizeof(hm_tag),
+		alloc
+	);
 	if (new_buf == NULL)
 		return -1;
 	tl->buf = new_buf;
@@ -77,7 +85,8 @@ void hm_taglist_advance(hm_taglist *tl, cu_string_view text)
 			}
 			continue;
 		}
-		uint64_t tag_chrs = text.len > tl->buf[tl->nel - 1].chars_in_tag ?
+		uint64_t tag_chrs =
+			text.len > tl->buf[tl->nel - 1].chars_in_tag ?
 			tl->buf[tl->nel - 1].chars_in_tag :
 			text.len;
 		void *nl = memchr(text.buf, '\n', tag_chrs);
