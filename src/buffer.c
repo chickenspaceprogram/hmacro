@@ -76,39 +76,39 @@ void hm_taglist_advance(hm_taglist *tl, cu_string_view text)
 {
 	while (text.len > 0) {
 		assert(tl->nel != 0);
-		if (tl->buf[tl->nel - 1].n_to_consume > 0) {
-			if (tl->buf[tl->nel - 1].n_to_consume > text.len) {
-				tl->buf[tl->nel - 1].n_to_consume -= text.len;
+		if (tl->buf[tl->nel - 1].n_to_ignore > 0) {
+			if (tl->buf[tl->nel - 1].n_to_ignore > text.len) {
+				tl->buf[tl->nel - 1].n_to_ignore -= text.len;
 				return;
 			}
 			else {
-				text.len -= tl->buf[tl->nel - 1].n_to_consume;
-				text.buf += tl->buf[tl->nel - 1].n_to_consume;
-				tl->buf[tl->nel - 1].n_to_consume = 0;
+				text.len -= tl->buf[tl->nel - 1].n_to_ignore;
+				text.buf += tl->buf[tl->nel - 1].n_to_ignore;
+				tl->buf[tl->nel - 1].n_to_ignore = 0;
 			}
 			continue;
 		}
 		uint64_t tag_chrs =
-			text.len > tl->buf[tl->nel - 1].chars_in_tag ?
-			tl->buf[tl->nel - 1].chars_in_tag :
+			text.len > tl->buf[tl->nel - 1].tag_len ?
+			tl->buf[tl->nel - 1].tag_len :
 			text.len;
 		void *nl = memchr(text.buf, '\n', tag_chrs);
 		if (nl == NULL) {
 			text.buf += tag_chrs;
 			text.len -= tag_chrs;
 			tl->buf[tl->nel - 1].col += tag_chrs;
-			tl->buf[tl->nel - 1].chars_in_tag -= tag_chrs;
+			tl->buf[tl->nel - 1].tag_len -= tag_chrs;
 		}
 		else {
 			uint64_t chrs_popped = (uint8_t *)nl + 1 - text.buf;
 			++tl->buf[tl->nel - 1].row;
 			tl->buf[tl->nel - 1].col = 1;
-			tl->buf[tl->nel - 1].chars_in_tag -= chrs_popped;
+			tl->buf[tl->nel - 1].tag_len -= chrs_popped;
 			text.buf += chrs_popped;
 			text.len -= chrs_popped;
 		}
 
-		if (tl->buf[tl->nel - 1].chars_in_tag == 0)
+		if (tl->buf[tl->nel - 1].tag_len == 0)
 			hm_taglist_pop(tl);
 	}
 }

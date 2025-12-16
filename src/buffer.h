@@ -72,10 +72,10 @@ typedef struct {
 	uint64_t col;
 
 	// Chars to consume before incrementing row/col
-	uint64_t n_to_consume;
+	uint64_t n_to_ignore;
 
 	// number of chars to consume while advancing row/col before removing tag
-	uint64_t chars_in_tag;
+	uint64_t tag_len;
 } hm_tag;
 
 // creates a hm tag struct declaration with the text of the tag and its number of chars
@@ -83,8 +83,8 @@ typedef struct {
 	.txt = (TAGTXT),\
 	.row = 1,\
 	.col = 1,\
-	.n_to_consume = 0,\
-	.chars_in_tag = (NCHRS),\
+	.n_to_ignore = 0,\
+	.tag_len = (NCHRS),\
 }
 
 typedef struct {
@@ -129,10 +129,10 @@ static inline hm_tag hm_taglist_pop(hm_taglist *tl)
 void hm_taglist_advance(hm_taglist *tl, cu_string_view text);
 
 // use when pushing expanded stuff onto the buffer to protect the top tag
-static inline void hm_taglist_add_consumable(hm_taglist *tl, uint64_t nconsume)
+static inline void hm_taglist_add_ignored(hm_taglist *tl, uint64_t nconsume)
 {
 	assert(tl->nel > 0);
-	tl->buf[tl->nel - 1].n_to_consume += nconsume;
+	tl->buf[tl->nel - 1].n_to_ignore += nconsume;
 }
 static inline hm_tag hm_taglist_peek(hm_taglist *tl)
 {
