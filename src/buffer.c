@@ -19,6 +19,7 @@
 #include "buffer.h"
 #define FILL_FACTOR 2
 #define MIN_CAPACITY 16
+#define MIN_NTAGS 4
 
 static inline uint64_t next_pwr_2(uint64_t val)
 {
@@ -56,6 +57,8 @@ int hm_taglist_reserve(hm_taglist *tl, uint64_t ntags, cu_alloc *alloc)
 	uint64_t next_cap = next_pwr_2(ntags);
 	if (next_cap <= tl->capacity)
 		return 0;
+	if (next_cap < MIN_NTAGS)
+		next_cap = MIN_NTAGS;
 	hm_tag *new_buf = cu_reallocarray(
 		tl->buf,
 		next_cap,

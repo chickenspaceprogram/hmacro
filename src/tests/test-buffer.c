@@ -36,7 +36,65 @@ static void test_hm_buf(void)
 	hm_buf_free(&buf, NULL);
 }
 
+static void test_hm_tag(void)
+{
+	cu_string_view s1 = cu_cstr_cast("text from\nfirst file\n");
+	cu_string_view s2 = cu_cstr_cast("text from\nsecond file");
+	hm_tag tag1 = HM_TAG_DEFAULT(cu_cstr_cast("tag one"), s1.len);
+	hm_tag tag2 = HM_TAG_DEFAULT(cu_cstr_cast("tag two"), s2.len);
+	// pretending s1 pushed onto buf, then s2
+	hm_taglist tl;
+	hm_taglist_init(&tl);
+	int retval = hm_taglist_push(&tl, tag1, NULL);
+	dbgassert(retval == 0);
+	hm_taglist_add_consumable(&tl, 6); // pretend a macro got expanded
+	retval = hm_taglist_push(&tl, tag2, NULL);
+	dbgassert(retval == 0);
+
+	// actual tests:
+	
+	hm_tag curtag = hm_taglist_peek(&tl);
+	dbgassert(cu_streq(cu_cstr_cast("tag two"), curtag.txt));
+	dbgassert(curtag.row == 1);
+	dbgassert(curtag.col == 1);
+	dbgassert(curtag.n_to_consume == 0);
+	dbgassert(curtag.chars_in_tag == s2.len);
+
+	hm_taglist_advance(&tl, (cu_string_view){
+		.buf = s2.buf,
+		.len = 13
+	});
+	curtag = hm_taglist_peek(&tl);
+	dbgassert(cu_streq(cu_cstr_cast("tag two"), curtag.txt));
+	dbgassert(curtag.row == 2);
+	dbgassert(curtag.col == 4);
+	dbgassert(curtag.n_to_consume == 0);
+	dbgassert(curtag.chars_in_tag == s2.len - 13);
+
+	hm_taglist_advance(&tl, cu_cstr_cast("ond fileasdf"));
+	curtag = hm_taglist_peek(&tl);
+	dbgassert(cu_streq(cu_cstr_cast("tag one"), curtag.txt));
+	dbgassert(curtag.row == 1);
+	dbgassert(curtag.col == 1);
+	dbgassert(curtag.n_to_consume == 2);
+	dbgassert(curtag.chars_in_tag == s1.len);
+
+	hm_taglist_advance(&tl, cu_cstr_cast("ghtext from\n"));
+	curtag = hm_taglist_peek(&tl);
+	dbgassert(cu_streq(cu_cstr_cast("tag one"), curtag.txt));
+	dbgassert(curtag.row == 2);
+	dbgassert(curtag.col == 1);
+	dbgassert(curtag.n_to_consume == 0);
+	dbgassert(curtag.chars_in_tag == s1.len - 10);
+
+	hm_taglist_advance(&tl, cu_cstr_cast("first file\n"));
+	dbgassert(hm_taglist_len(&tl) == 0);
+
+	hm_taglist_free(&tl, NULL);
+}
+
 int main(void)
 {
 	test_hm_buf();
+	test_hm_tag();
 }
