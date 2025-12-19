@@ -51,24 +51,17 @@ hm_tlit_stream(
 }
 
 typedef enum {
-	HM_NUMERIC_0,
-	HM_NUMERIC_1,
-	HM_NUMERIC_2,
-	HM_NUMERIC_3,
-	HM_NUMERIC_4,
-	HM_NUMERIC_5,
-	HM_NUMERIC_6,
-	HM_NUMERIC_7,
-	HM_NUMERIC_8,
-	HM_NUMERIC_9,
 	HM_TEXT,
-	HM_EXPANDER,
-	HM_QUOTER,
-	HM_MACRO_START,
-	HM_BEGIN_SCOPE,
-	HM_END_SCOPE,
-	HM_MACRO_NAME,
-	HM_WHITESPACE,
+	HM_NUMERIC, // not user-changeable
+	HM_BEGIN_QUOTE,		// `{`
+	HM_END_QUOTE,		// `}`
+	HM_BEGIN_EXPAND,	// `[`
+	HM_END_EXPAND,		// `]`
+	HM_MACRO_SIGN,		// `\`
+	HM_TYPE_SIGN,		// `!`
+	HM_TYPE_SUM,		// `:`
+	HM_MACRO_NAME,		// [a-zA-Z\-_]
+	HM_WHITESPACE,		// [ \t\n\v\r]
 } hm_chartypes;
 
 void hm_tlit_set_default(hm_tlit_lut *lut);
