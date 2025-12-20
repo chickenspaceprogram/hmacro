@@ -61,7 +61,7 @@ typedef enum {
 	HM_TYPE_SIGN,		// `!`
 	HM_TYPE_SUM,		// `:`
 	HM_MACRO_NAME,		// [a-zA-Z\-_]
-	HM_WHITESPACE,		// [ \t\n\v\r]
+	HM_WHITESPACE,		// [ \t\n\v\f\r]
 } hm_chartypes;
 
 void hm_tlit_set_default(hm_tlit_lut *lut);

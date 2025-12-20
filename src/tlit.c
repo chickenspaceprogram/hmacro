@@ -23,13 +23,15 @@ void hm_tlit_set_default(hm_tlit_lut *lut)
 {
 	memset(lut->lut, HM_TEXT, 0x100);
 	for (size_t i = '0'; i <= '9'; ++i) {
-		lut->lut[i] = i - '0';
+		lut->lut[i] = HM_NUMERIC;
 	}
-	lut->lut['$'] = HM_EXPANDER;
-	lut->lut['#'] = HM_QUOTER;
-	lut->lut['\\'] = HM_MACRO_START;
-	lut->lut['{'] = HM_BEGIN_SCOPE;
-	lut->lut['}'] = HM_END_SCOPE;
+	lut->lut['{'] = HM_BEGIN_QUOTE;
+	lut->lut['}'] = HM_END_QUOTE;
+	lut->lut['['] = HM_BEGIN_EXPAND;
+	lut->lut[']'] = HM_END_EXPAND;
+	lut->lut['\\'] = HM_MACRO_SIGN;
+	lut->lut['!'] = HM_TYPE_SIGN;
+	lut->lut[':'] = HM_TYPE_SUM;
 
 	lut->lut['-'] = HM_MACRO_NAME;
 	lut->lut['_'] = HM_MACRO_NAME;
