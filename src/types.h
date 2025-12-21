@@ -21,8 +21,37 @@
 #include <stdint.h>
 #include <cu/string.h>
 
-typedef struct {
-	size_t num_tIDs;
-	uintptr_t child_tIDs[];
-} hm_type;
+
+// Kinds of types
+enum { // kind
+	// Fundamental types
+	HM_TYPE_FUNDAMENTAL,
+
+	// Complex types
+	HM_TYPE_SUM,
+	HM_TYPE_PROD,
+	HM_TYPE_KLEENE, // matches as many as possible of a child type
+};
+
+// fundamental typeIDs
+enum {
+	// Denotes a nameless type
+	HM_TYPE_NAMELESS = 0,
+
+	HM_FUND_CHR,
+	HM_FUND_WS,
+	HM_FUND_MACRO,
+	HM_FUND_TYPE,
+	HM_FUND_QSCOPE,
+	HM_FUND_ESCOPE,
+};
+
+
+typedef struct hm_type hm_type;
+struct hm_type {
+	size_t num_children;
+	uintptr_t id;
+	uint8_t kind;
+	hm_type *child_ids[];
+};
 
