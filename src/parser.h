@@ -29,5 +29,5 @@ enum {
 
 };
 typedef struct {
-	cu_string_view txt;
+	cu_str txt;
 } hm_input_token;

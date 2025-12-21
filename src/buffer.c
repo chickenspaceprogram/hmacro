@@ -72,7 +72,7 @@ int hm_taglist_reserve(hm_taglist *tl, uint64_t ntags, cu_alloc *alloc)
 	tl->capacity = next_cap;
 	return 0;
 }
-void hm_taglist_advance(hm_taglist *tl, cu_string_view text)
+void hm_taglist_advance(hm_taglist *tl, cu_str text)
 {
 	while (text.len > 0) {
 		assert(tl->nel != 0);

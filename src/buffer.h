@@ -39,7 +39,7 @@ static inline void hm_buf_free(hm_buf *buf, cu_alloc *alloc)
 	cu_free(buf->buf, buf->capacity, alloc);
 }
 int hm_buf_reserve(hm_buf *buf, uint64_t nchrs, cu_alloc *alloc);
-static inline int hm_buf_push(hm_buf *buf, cu_string_view txt, cu_alloc *alloc)
+static inline int hm_buf_push(hm_buf *buf, cu_str txt, cu_alloc *alloc)
 {
 	if (txt.buf == NULL)
 		return 0;
@@ -55,10 +55,10 @@ static inline void hm_buf_pop(hm_buf *buf, uint64_t nchrs_popped)
 	buf->start += nchrs_popped;
 	assert(buf->start <= buf->capacity);
 }
-static inline cu_string_view hm_buf_contents(hm_buf *buf)
+static inline cu_str hm_buf_contents(hm_buf *buf)
 {
 	assert(buf->buf != NULL);
-	return (cu_string_view){
+	return (cu_str){
 		.buf = buf->buf + buf->start,
 		.len = buf->capacity - buf->start,
 	};
@@ -66,7 +66,7 @@ static inline cu_string_view hm_buf_contents(hm_buf *buf)
 
 typedef struct {
 	// Text of the tag (usually a filename)
-	cu_string_view txt;
+	cu_str txt;
 	// Current row and col (set these to 1 and 1
 	uint64_t row;
 	uint64_t col;
@@ -126,7 +126,7 @@ static inline hm_tag hm_taglist_pop(hm_taglist *tl)
 
 }
 // usually exactly what you want
-void hm_taglist_advance(hm_taglist *tl, cu_string_view text);
+void hm_taglist_advance(hm_taglist *tl, cu_str text);
 
 // use when pushing expanded stuff onto the buffer to protect the top tag
 static inline void hm_taglist_add_ignored(hm_taglist *tl, uint64_t nconsume)

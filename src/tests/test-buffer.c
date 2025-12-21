@@ -21,13 +21,13 @@
 
 static void test_hm_buf(void)
 {
-	cu_string_view s1 = cu_cstr_cast("text from\nfirst file\n");
-	cu_string_view s2 = cu_cstr_cast("text from\nsecond file");
+	cu_str s1 = cu_cstr_cast("text from\nfirst file\n");
+	cu_str s2 = cu_cstr_cast("text from\nsecond file");
 	hm_buf buf;
 	hm_buf_init(&buf);
 	hm_buf_push(&buf, s1, NULL);
 	hm_buf_push(&buf, s2, NULL);
-	cu_string_view contents = hm_buf_contents(&buf);
+	cu_str contents = hm_buf_contents(&buf);
 	dbgassert(cu_streq(contents, cu_cstr_cast("text from\nsecond filetext from\nfirst file\n")));
 	hm_buf_pop(&buf, 5);
 	contents = hm_buf_contents(&buf);
@@ -38,8 +38,8 @@ static void test_hm_buf(void)
 
 static void test_hm_tag(void)
 {
-	cu_string_view s1 = cu_cstr_cast("text from\nfirst file\n");
-	cu_string_view s2 = cu_cstr_cast("text from\nsecond file");
+	cu_str s1 = cu_cstr_cast("text from\nfirst file\n");
+	cu_str s2 = cu_cstr_cast("text from\nsecond file");
 	hm_tag tag1 = HM_TAG_DEFAULT(cu_cstr_cast("tag one"), s1.len);
 	hm_tag tag2 = HM_TAG_DEFAULT(cu_cstr_cast("tag two"), s2.len);
 	// pretending s1 pushed onto buf, then s2
@@ -60,7 +60,7 @@ static void test_hm_tag(void)
 	dbgassert(curtag.n_to_ignore == 0);
 	dbgassert(curtag.tag_len == s2.len);
 
-	hm_taglist_advance(&tl, (cu_string_view){
+	hm_taglist_advance(&tl, (cu_str){
 		.buf = s2.buf,
 		.len = 13
 	});
