@@ -53,14 +53,15 @@ hm_tlit_stream(
 typedef enum {
 	HM_TEXT,
 	HM_NUMERIC, // not user-changeable
+	HM_NEGATIVE,		// `-`
 	HM_BEGIN_QUOTE,		// `{`
 	HM_END_QUOTE,		// `}`
 	HM_BEGIN_EXPAND,	// `[`
 	HM_END_EXPAND,		// `]`
 	HM_MACRO_SIGN,		// `\`
-	HM_TYPE_SIGN,		// `!`
-	HM_TYPE_SUM,		// `:`
-	HM_MACRO_NAME,		// [a-zA-Z\-_]
+	HM_TYPESIGN,		// `!`
+	HM_TYPEALTERNATE,	// `:`
+	HM_MACRO_NAME,		// [a-zA-Z_]
 	HM_WHITESPACE,		// [ \t\n\v\f\r]
 } hm_chartypes;
 

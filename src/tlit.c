@@ -30,8 +30,8 @@ void hm_tlit_set_default(hm_tlit_lut *lut)
 	lut->lut['['] = HM_BEGIN_EXPAND;
 	lut->lut[']'] = HM_END_EXPAND;
 	lut->lut['\\'] = HM_MACRO_SIGN;
-	lut->lut['!'] = HM_TYPE_SIGN;
-	lut->lut[':'] = HM_TYPE_SUM;
+	lut->lut['!'] = HM_TYPESIGN;
+	lut->lut[':'] = HM_TYPEALTERNATE;
 
 	lut->lut['-'] = HM_MACRO_NAME;
 	lut->lut['_'] = HM_MACRO_NAME;

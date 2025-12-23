@@ -20,6 +20,7 @@
 
 #include <stdint.h>
 #include <cu/string.h>
+#include "tlit.h"
 
 
 // Kinds of types
@@ -36,14 +37,17 @@ enum { // kind
 // fundamental typeIDs
 enum {
 	// Denotes a nameless type
+	// Not a fundamental type, but reserved
 	HM_TYPE_NAMELESS = 0,
 
 	HM_FUND_CHR,
 	HM_FUND_WS,
 	HM_FUND_MACRO,
-	HM_FUND_TYPE,
+	HM_FUND_BEGINTYPE,
+	HM_FUND_TYPEALTERNATE,
 	HM_FUND_QSCOPE,
 	HM_FUND_ESCOPE,
+	HM_FUND_NUMERIC,
 };
 
 
@@ -52,6 +56,9 @@ struct hm_type {
 	size_t num_children;
 	uintptr_t id;
 	uint8_t kind;
-	hm_type *child_ids[];
+	hm_type *children[];
 };
+
+cu_str hm_parse_fund_type(uintptr_t *id, const hm_tlit_lut *lut, cu_str txt);
+
 
