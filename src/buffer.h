@@ -24,8 +24,8 @@
 
 typedef struct {
 	uint8_t *buf;
-	uint64_t capacity;
-	uint64_t start;
+	size_t capacity;
+	size_t start;
 } hm_buf;
 
 static inline void hm_buf_init(hm_buf *buf)
@@ -38,7 +38,7 @@ static inline void hm_buf_free(hm_buf *buf, cu_alloc *alloc)
 {
 	cu_free(buf->buf, buf->capacity, alloc);
 }
-int hm_buf_reserve(hm_buf *buf, uint64_t nchrs, cu_alloc *alloc);
+int hm_buf_reserve(hm_buf *buf, size_t nchrs, cu_alloc *alloc);
 static inline int hm_buf_push(hm_buf *buf, cu_str txt, cu_alloc *alloc)
 {
 	if (txt.buf == NULL)
@@ -50,7 +50,7 @@ static inline int hm_buf_push(hm_buf *buf, cu_str txt, cu_alloc *alloc)
 	memcpy(buf->buf + buf->start, txt.buf, txt.len);
 	return 0;
 }
-static inline void hm_buf_pop(hm_buf *buf, uint64_t nchrs_popped)
+static inline void hm_buf_pop(hm_buf *buf, size_t nchrs_popped)
 {
 	buf->start += nchrs_popped;
 	assert(buf->start <= buf->capacity);
@@ -68,14 +68,14 @@ typedef struct {
 	// Text of the tag (usually a filename)
 	cu_str txt;
 	// Current row and col (set these to 1 and 1
-	uint64_t row;
-	uint64_t col;
+	size_t row;
+	size_t col;
 
 	// Chars to consume before incrementing row/col
-	uint64_t n_to_ignore;
+	size_t n_to_ignore;
 
 	// number of chars to consume while advancing row/col before removing tag
-	uint64_t tag_len;
+	size_t tag_len;
 } hm_tag;
 
 // creates a hm tag struct declaration with the text of the tag and its number of chars
@@ -89,8 +89,8 @@ typedef struct {
 
 typedef struct {
 	hm_tag *buf;
-	uint64_t capacity;
-	uint64_t nel;
+	size_t capacity;
+	size_t nel;
 } hm_taglist;
 
 
@@ -105,11 +105,11 @@ static inline void hm_taglist_free(hm_taglist *tl, cu_alloc *alloc)
 	cu_freearray(tl->buf, tl->capacity, sizeof(hm_tag), alloc);
 }
 
-static inline uint64_t hm_taglist_len(hm_taglist *tl)
+static inline size_t hm_taglist_len(hm_taglist *tl)
 {
 	return tl->nel;
 }
-int hm_taglist_reserve(hm_taglist *tl, uint64_t ntags, cu_alloc *alloc);
+int hm_taglist_reserve(hm_taglist *tl, size_t ntags, cu_alloc *alloc);
 static inline int hm_taglist_push(hm_taglist *tl, hm_tag tag, cu_alloc *alloc)
 {
 	int retval = hm_taglist_reserve(tl, tl->nel + 1, alloc);
@@ -129,7 +129,7 @@ static inline hm_tag hm_taglist_pop(hm_taglist *tl)
 void hm_taglist_advance(hm_taglist *tl, cu_str text);
 
 // use when pushing expanded stuff onto the buffer to protect the top tag
-static inline void hm_taglist_add_ignored(hm_taglist *tl, uint64_t nconsume)
+static inline void hm_taglist_add_ignored(hm_taglist *tl, size_t nconsume)
 {
 	assert(tl->nel > 0);
 	tl->buf[tl->nel - 1].n_to_ignore += nconsume;

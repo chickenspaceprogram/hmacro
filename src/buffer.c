@@ -16,27 +16,15 @@
 
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <cu/bitmanip.h>
 #include "buffer.h"
 #define FILL_FACTOR 2
 #define MIN_CAPACITY 16
 #define MIN_NTAGS 4
 
-static inline uint64_t next_pwr_2(uint64_t val)
+int hm_buf_reserve(hm_buf *buf, size_t nchrs, cu_alloc *alloc)
 {
-	--val;
-	val |= val >> 1;
-	val |= val >> 2;
-	val |= val >> 4;
-	val |= val >> 8;
-	val |= val >> 16;
-	val |= val >> 32;
-	++val;
-	return val;
-}
-
-int hm_buf_reserve(hm_buf *buf, uint64_t nchrs, cu_alloc *alloc)
-{
-	uint64_t next_cap = next_pwr_2(nchrs);
+	size_t next_cap = cu_bit_ceil(nchrs);
 	if (next_cap <= buf->capacity)
 		return 0;
 	if (next_cap < MIN_CAPACITY)
@@ -44,7 +32,7 @@ int hm_buf_reserve(hm_buf *buf, uint64_t nchrs, cu_alloc *alloc)
 	uint8_t *new_buf = cu_malloc(next_cap, alloc);
 	if (new_buf == NULL)
 		return -1;
-	uint64_t txt_len = buf->capacity - buf->start;
+	size_t txt_len = buf->capacity - buf->start;
 	memcpy(new_buf + next_cap - txt_len, buf->buf + buf->start, txt_len);
 	cu_free(buf->buf, buf->capacity, alloc);
 	buf->buf = new_buf;
@@ -52,9 +40,9 @@ int hm_buf_reserve(hm_buf *buf, uint64_t nchrs, cu_alloc *alloc)
 	buf->start = next_cap - txt_len;
 	return 0;
 }
-int hm_taglist_reserve(hm_taglist *tl, uint64_t ntags, cu_alloc *alloc)
+int hm_taglist_reserve(hm_taglist *tl, size_t ntags, cu_alloc *alloc)
 {
-	uint64_t next_cap = next_pwr_2(ntags);
+	size_t next_cap = cu_bit_ceil(ntags);
 	if (next_cap <= tl->capacity)
 		return 0;
 	if (next_cap < MIN_NTAGS)
@@ -88,7 +76,7 @@ void hm_taglist_advance(hm_taglist *tl, cu_str text)
 			}
 			continue;
 		}
-		uint64_t tag_chrs =
+		size_t tag_chrs =
 			text.len > tl->buf[tl->nel - 1].tag_len ?
 			tl->buf[tl->nel - 1].tag_len :
 			text.len;
@@ -100,7 +88,7 @@ void hm_taglist_advance(hm_taglist *tl, cu_str text)
 			tl->buf[tl->nel - 1].tag_len -= tag_chrs;
 		}
 		else {
-			uint64_t chrs_popped = (uint8_t *)nl + 1 - text.buf;
+			size_t chrs_popped = (uint8_t *)nl + 1 - text.buf;
 			++tl->buf[tl->nel - 1].row;
 			tl->buf[tl->nel - 1].col = 1;
 			tl->buf[tl->nel - 1].tag_len -= chrs_popped;
