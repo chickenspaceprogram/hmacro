@@ -56,11 +56,11 @@ typedef enum {
 	HM_NEGATIVE,		// `-`
 	HM_BEGIN_QUOTE,		// `{`
 	HM_END_QUOTE,		// `}`
-	HM_BEGIN_EXPAND,	// `[`
-	HM_END_EXPAND,		// `]`
+	HM_EXPANDER,		// `$`
 	HM_MACRO_SIGN,		// `\`
 	HM_TYPESIGN,		// `!`
 	HM_TYPEALTERNATE,	// `:`
+	HM_KLEENE,		// `*`
 	HM_MACRO_NAME,		// [a-zA-Z_]
 	HM_WHITESPACE,		// [ \t\n\v\f\r]
 } hm_chartypes;

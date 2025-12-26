@@ -20,6 +20,7 @@
 
 #include <stdint.h>
 #include <cu/string.h>
+#include <cu/arena.h>
 #include "tlit.h"
 
 
@@ -34,13 +35,15 @@ enum { // kind
 	HM_TYPE_KLEENE, // matches as many as possible of a child type
 };
 
-// fundamental typeIDs
+// fundamental and reserved typeIDs
 enum {
 	// Denotes a nameless type
 	// Not a fundamental type, but reserved
-	HM_TYPE_NAMELESS = 0,
+	HM_RESERVED_NAMELESS = 0,
 
+	// Fundamental typeIDs; these are syntactic concepts
 	HM_FUND_CHR,
+	HM_FUND_ESCCHR,
 	HM_FUND_WS,
 	HM_FUND_MACRO,
 	HM_FUND_BEGINTYPE,
@@ -48,6 +51,12 @@ enum {
 	HM_FUND_QSCOPE,
 	HM_FUND_ESCOPE,
 	HM_FUND_NUMERIC,
+
+	// Reserved for the type of the def-args and the typedef-args
+	HM_RESERVED_DEF_ARGS,
+	HM_RESERVED_TYPEDEF_ARGS,
+
+	HM_NUM_RESERVED_TYPEIDS,
 };
 
 
@@ -59,6 +68,11 @@ struct hm_type {
 	hm_type *children[];
 };
 
-cu_str hm_parse_fund_type(uintptr_t *id, const hm_tlit_lut *lut, cu_str txt);
+typedef struct {
+	
+} hm_typelist;
+
+cu_str hm_parse_fund_type(uintptr_t *id, const hm_tlit_lut *lut, cu_str *txt);
+hm_type *hm_type_create(size_t num_children, cu_arena *arena);
 
 

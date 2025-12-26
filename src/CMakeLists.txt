@@ -22,6 +22,7 @@ add_library(hmacro-lib
 	hmacro.c
 	tlit.c
 	buffer.c
+	types.c
 )
 
 target_link_libraries(hmacro-lib PUBLIC CUtils)
