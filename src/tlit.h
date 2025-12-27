@@ -54,8 +54,8 @@ typedef enum {
 	HM_TEXT,
 	HM_NUMERIC, // not user-changeable
 	HM_NEGATIVE,		// `-`
-	HM_BEGIN_QUOTE,		// `{`
-	HM_END_QUOTE,		// `}`
+	HM_BEGIN_SCOPE,		// `{`
+	HM_END_SCOPE,		// `}`
 	HM_EXPANDER,		// `$`
 	HM_MACRO_SIGN,		// `\`
 	HM_TYPESIGN,		// `!`

@@ -25,8 +25,8 @@ void hm_tlit_set_default(hm_tlit_lut *lut)
 	for (size_t i = '0'; i <= '9'; ++i) {
 		lut->lut[i] = HM_NUMERIC;
 	}
-	lut->lut['{'] = HM_BEGIN_QUOTE;
-	lut->lut['}'] = HM_END_QUOTE;
+	lut->lut['{'] = HM_BEGIN_SCOPE;
+	lut->lut['}'] = HM_END_SCOPE;
 	lut->lut['$'] = HM_EXPANDER;
 	lut->lut['\\'] = HM_MACRO_SIGN;
 	lut->lut['!'] = HM_TYPESIGN;

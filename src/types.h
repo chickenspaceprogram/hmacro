@@ -42,19 +42,19 @@ enum {
 	HM_RESERVED_NAMELESS = 0,
 
 	// Fundamental typeIDs; these are syntactic concepts
-	HM_FUND_CHR,
-	HM_FUND_ESCCHR,
-	HM_FUND_WS,
-	HM_FUND_MACRO,
-	HM_FUND_BEGINTYPE,
-	HM_FUND_TYPEALTERNATE,
-	HM_FUND_QSCOPE,
-	HM_FUND_ESCOPE,
-	HM_FUND_NUMERIC,
+	HM_ID_WS,
+	HM_ID_ESCCHR,
+	HM_ID_MACRO,
+	HM_ID_BEGINTYPE,
+	HM_ID_ALTERNATETYPE,
+	HM_ID_ESCOPE,
+	HM_ID_SCOPE,
+	HM_ID_CHR,
+	HM_ID_NUMERIC,
 
 	// Reserved for the type of the def-args and the typedef-args
-	HM_RESERVED_DEF_ARGS,
-	HM_RESERVED_TYPEDEF_ARGS,
+	HM_ID_DEF_ARGS,
+	HM_ID_TYPEDEF_ARGS,
 
 	HM_NUM_RESERVED_TYPEIDS,
 };
@@ -72,7 +72,17 @@ typedef struct {
 	
 } hm_typelist;
 
-cu_str hm_parse_fund_type(uintptr_t *id, const hm_tlit_lut *lut, cu_str *txt);
+// all of these assume txt has nonzero length
+cu_str hm_parse_ws(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_escchr(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_macro(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_begintype(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_alternatetype(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_escope(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_scope(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_chr(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_numeric(const hm_tlit_lut *lut, cu_str *txt);
+
 hm_type *hm_type_create(size_t num_children, cu_arena *arena);
 
 

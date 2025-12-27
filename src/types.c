@@ -3,6 +3,49 @@
 
 #define NIL_STR (cu_str){ .buf = NULL, .len = 0 }
 
+cu_str hm_parse_ws(const hm_tlit_lut *lut, cu_str *txt)
+{
+	assert(txt->len > 0 && "string must have nonzero length to be parsed");
+	size_t nws = 0;
+	for (nws = 0; nws < txt->len; ++nws) {
+		if (hm_tlit_octet(lut, txt->buf[nws]) != HM_WHITESPACE) {
+			break;
+		}
+	}
+	if (nws == 0)
+		return NIL_STR;
+	cu_str retval = *txt;
+	retval.len = nws;
+	txt->buf += nws;
+	txt->len -= nws;
+	return retval;
+}
+cu_str hm_parse_escchr(const hm_tlit_lut *lut, cu_str *txt)
+{
+	assert(txt->len > 0 && "string must have nonzero length to be parsed");
+	if (txt->len < 2)
+		return NIL_STR;
+	if (hm_tlit_octet(lut, txt->buf[0]) != HM_MACRO_SIGN)
+		return NIL_STR;
+	if (hm_tlit_octet(lut, txt->buf[1]) == HM_MACRO_NAME)
+		return NIL_STR;
+	cu_str retval = *txt;
+	++retval.buf;
+	retval.len = 1;
+	txt->buf += 2;
+	txt->len -= 2;
+	return retval;
+}
+cu_str hm_parse_macro(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_begintype(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_alternatetype(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_escope(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_scope(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_chr(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_numeric(const hm_tlit_lut *lut, cu_str *txt);
+
+
+// going to delete this as soon as i properly rewrite things
 cu_str hm_parse_fund_type(uintptr_t *id, const hm_tlit_lut *lut, cu_str *txt)
 {
 	if (txt->len == 0)
