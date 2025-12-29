@@ -56,40 +56,35 @@ struct hm_type {
 	};
 };
 
+typedef struct hm_type_block hm_type_block;
+struct hm_type_block {
+	hm_type_block *next;
+	size_t capacity;
+	hm_type *types[];
+};
+
 
 typedef struct {
 	size_t n_ids;
-	size_t capacity;
-	hm_type **idlist;
-	cu_arena *elem_backing;
-	cu_alloc *alloc;
+	hm_type_block *idlist;
+	cu_arena *backing;
 } hm_type_record;
 
 // Initializes the hm_type_record with the fundamental types.
-int hm_type_record_init(hm_type_record *rec, cu_alloc *alloc);
-static inline void hm_type_record_free(hm_type_record *rec)
-{
-	cu_arena_free(rec->elem_backing);
-	cu_freearray(rec->idlist, rec->capacity, sizeof(hm_type *), rec->alloc);
-}
+int hm_type_record_init(hm_type_record *rec, cu_arena *backing);
 int hm_type_record_reserve(hm_type_record *rec, size_t new_n_ids);
 
 // Registers a new type to the record, returns its id
 //
 // If this fails, 0 is returned.
 // IDs are therefore nonzero.
-static inline size_t hm_type_record_register(hm_type_record *rec, hm_type *type)
-{
-	if (hm_type_record_reserve(rec, rec->n_ids + 1) != 0) {
-		return 0;
-	}
-	rec->idlist[rec->n_ids] = type;
-	return rec->n_ids++;
-}
+size_t hm_type_record_register(hm_type_record *rec, hm_type *type);
+
+hm_type *hm_type_record_lookup(hm_type_record *rec, size_t id);
 
 static inline hm_type *hm_type_alloc(hm_type_record *rec, size_t nchild)
 {
-	return cu_arena_alloc(sizeof(hm_type) + nchild * sizeof(hm_type *), rec->elem_backing);
+	return cu_arena_alloc(sizeof(hm_type) + nchild * sizeof(hm_type *), rec->backing);
 }
 
 
@@ -130,6 +125,8 @@ cu_str hm_parse_chr(const hm_tlit_lut *lut, cu_str *txt);
 cu_str hm_parse_numeric(const hm_tlit_lut *lut, cu_str *txt);
 
 
+
+// still need to write parser
 typedef struct hm_ast_node hm_ast_node;
 struct hm_ast_node {
 	size_t id;

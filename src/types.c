@@ -2,7 +2,8 @@
 #include <assert.h>
 #include <cu/bitmanip.h>
 
-#define DEFAULT_TREEBUF_SZ 0x10000
+#define DEFAULT_ID_CAPACITY (cu_bit_ceil(HM_NUM_FUND_TYPEIDS) << 2)
+
 hm_parse_func hm_parse_fns[HM_NUM_FUND_TYPEIDS] = {
 	NULL,
 	hm_parse_ws,
@@ -163,60 +164,89 @@ cu_str hm_parse_numeric(const hm_tlit_lut *lut, cu_str *txt)
 	return retval;
 }
 
-int hm_type_record_init(hm_type_record *rec, cu_alloc *alloc)
+int hm_type_record_init(hm_type_record *rec, cu_arena *backing)
 {
 	rec->n_ids = 0;
-	rec->capacity = 0;
 	rec->idlist = NULL;
-	rec->alloc = alloc;
+	rec->backing = backing;
 
-	rec->elem_backing = cu_arena_new(DEFAULT_TREEBUF_SZ, alloc);
-	if (rec->elem_backing == NULL)
-		return -1;
-	int retval = hm_type_record_reserve(rec, HM_NUM_FUND_TYPEIDS);
-	if (retval != 0) {
-		cu_arena_free(rec->elem_backing);
+	int retval = hm_type_record_reserve(rec, DEFAULT_ID_CAPACITY);
+	if (retval != 0)
 		return retval;
-	}
-
 	rec->n_ids = HM_NUM_FUND_TYPEIDS;
+	assert(rec->idlist != NULL && "should have an idlist");
+	hm_type_block *cur_block = rec->idlist->next;
+	assert(cur_block->next == NULL && "should only have one block");
 
 	// fully initialized, rec is in a valid state from here on out
 	
-	rec->idlist[HM_ID_NULL] = NULL; // no fst elem
+	cur_block->types[HM_ID_NULL] = NULL; // no fst elem
 
 	size_t id = 1;
 
 	for (; id < HM_NUM_FUND_TYPEIDS; ++id) {
-		rec->idlist[id] = hm_type_alloc(rec, 0);
-		if (rec->idlist[id] == NULL) {
-			// error, cleanup
-			hm_type_record_free(rec);
+		cur_block->types[id] = hm_type_alloc(rec, 0);
+		if (cur_block->types[id] == NULL)
 			return -1;
-		}
-		rec->idlist[id]->id = id;
-		rec->idlist[id]->kind = HM_KIND_FUNDAMENTAL;
-		rec->idlist[id]->pf = hm_parse_fns[id];
+		cur_block->types[id]->id = id;
+		cur_block->types[id]->kind = HM_KIND_FUNDAMENTAL;
+		cur_block->types[id]->pf = hm_parse_fns[id];
 	}
 	return 0;
 }
 
 int hm_type_record_reserve(hm_type_record *rec, size_t new_n_ids)
 {
-	if (new_n_ids <= rec->capacity)
-		return 0;
-	
-	size_t new_sz = cu_bit_ceil(new_n_ids);
 	if (rec->idlist == NULL) {
-		rec->idlist = cu_allocarray(new_sz, sizeof(hm_type *), rec->alloc);
-		if (rec->idlist == NULL)
-			return -1;
+		size_t blocksz = cu_bit_ceil(new_n_ids) * sizeof(hm_type *)
+			+ sizeof(hm_type_block);
+		rec->idlist = cu_arena_alloc(blocksz, rec->backing);
+		return rec->idlist == NULL ? -1 : 0;
 	}
-	else {
-		int retval = cu_try_reallocarray((void **)&rec->idlist, new_sz, rec->capacity, sizeof(hm_type *), rec->alloc);
-		if (retval != 0)
-			return retval;
+	size_t nel = 0;
+	hm_type_block *last = NULL;
+	for (hm_type_block *blk = rec->idlist; blk != NULL; blk = blk->next) {
+		nel += blk->capacity;
+		if (nel >= new_n_ids)
+			return 0;
+		last = blk;
 	}
-	rec->capacity = new_sz;
-	return 0;
+	assert(last != NULL && "should have a last ptr");
+
+	size_t new_block_sz = cu_bit_ceil(nel + new_n_ids) - nel;
+	new_block_sz =
+		new_block_sz * sizeof(hm_type *) + sizeof(hm_type_block);
+	last->next = cu_arena_alloc(new_block_sz, rec->backing);
+	return last->next == NULL ? -1 : 0;
+}
+
+static inline hm_type **rec_lookup_internal(hm_type_record *rec, size_t id)
+{
+	if (id < rec->n_ids)
+		return NULL;
+	for (hm_type_block *blk = rec->idlist; blk != NULL; blk = blk->next) {
+		if (id < blk->capacity)
+			return blk->types + id;
+		id -= blk->capacity;
+	}
+	assert(0 && "record invariants violated");
+	return NULL;
+}
+size_t hm_type_record_register(hm_type_record *rec, hm_type *type)
+{
+	int rv = hm_type_record_reserve(rec, rec->n_ids + 1);
+	if (rv != 0)
+		return rv;
+	++rec->n_ids;
+	hm_type **res = rec_lookup_internal(rec, rec->n_ids - 1);
+	assert(res != NULL && "should have space for the type");
+	*res = type;
+	return rec->n_ids - 1;
+}
+hm_type *hm_type_record_lookup(hm_type_record *rec, size_t id)
+{
+	hm_type **res = rec_lookup_internal(rec, id);
+	if (res == NULL)
+		return NULL;
+	return *res;
 }

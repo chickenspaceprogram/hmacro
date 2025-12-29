@@ -29,7 +29,7 @@ include(FetchContent)
 FetchContent_Declare(
 	CUtils
 	GIT_REPOSITORY https://github.com/chickenspaceprogram/c-utils
-	GIT_TAG 0.8.1
+	GIT_TAG 0.8.2
 )
 
 FetchContent_MakeAvailable(CUtils)
