@@ -3,7 +3,7 @@
 #include <cu/bitmanip.h>
 
 #define DEFAULT_TREEBUF_SZ 0x10000
-extern hm_parse_func hm_parse_fns[HM_NUM_FUND_TYPEIDS] = {
+hm_parse_func hm_parse_fns[HM_NUM_FUND_TYPEIDS] = {
 	NULL,
 	hm_parse_ws,
 	hm_parse_escchr,
@@ -167,7 +167,7 @@ int hm_type_record_init(hm_type_record *rec, cu_alloc *alloc)
 {
 	rec->n_ids = 0;
 	rec->capacity = 0;
-	rec->fst_id = NULL;
+	rec->idlist = NULL;
 	rec->alloc = alloc;
 
 	rec->elem_backing = cu_arena_new(DEFAULT_TREEBUF_SZ, alloc);
@@ -183,20 +183,20 @@ int hm_type_record_init(hm_type_record *rec, cu_alloc *alloc)
 
 	// fully initialized, rec is in a valid state from here on out
 	
-	rec->fst_id[HM_ID_NULL] = NULL; // no fst elem
+	rec->idlist[HM_ID_NULL] = NULL; // no fst elem
 
 	size_t id = 1;
 
 	for (; id < HM_NUM_FUND_TYPEIDS; ++id) {
-		rec->fst_id[id] = hm_type_alloc(rec, 0);
-		if (rec->fst_id[id] == NULL) {
+		rec->idlist[id] = hm_type_alloc(rec, 0);
+		if (rec->idlist[id] == NULL) {
 			// error, cleanup
 			hm_type_record_free(rec);
 			return -1;
 		}
-		rec->fst_id[id]->id = id;
-		rec->fst_id[id]->kind = HM_KIND_FUNDAMENTAL;
-		rec->fst_id[id]->pf = hm_parse_fns[id];
+		rec->idlist[id]->id = id;
+		rec->idlist[id]->kind = HM_KIND_FUNDAMENTAL;
+		rec->idlist[id]->pf = hm_parse_fns[id];
 	}
 	return 0;
 }
@@ -207,13 +207,13 @@ int hm_type_record_reserve(hm_type_record *rec, size_t new_n_ids)
 		return 0;
 	
 	size_t new_sz = cu_bit_ceil(new_n_ids);
-	if (rec->fst_id == NULL) {
-		rec->fst_id = cu_allocarray(new_sz, sizeof(hm_type *), rec->alloc);
-		if (rec->fst_id == NULL)
+	if (rec->idlist == NULL) {
+		rec->idlist = cu_allocarray(new_sz, sizeof(hm_type *), rec->alloc);
+		if (rec->idlist == NULL)
 			return -1;
 	}
 	else {
-		int retval = cu_try_reallocarray((void **)&rec->fst_id, new_sz, rec->capacity, sizeof(hm_type *), rec->alloc);
+		int retval = cu_try_reallocarray((void **)&rec->idlist, new_sz, rec->capacity, sizeof(hm_type *), rec->alloc);
 		if (retval != 0)
 			return retval;
 	}

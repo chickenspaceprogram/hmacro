@@ -43,7 +43,6 @@ enum {
 typedef cu_str (*hm_parse_func)(const hm_tlit_lut *lut, cu_str *txt);
 
 typedef struct hm_type hm_type;
-
 struct hm_type {
 	size_t id;
 	uint8_t kind;
@@ -57,22 +56,11 @@ struct hm_type {
 	};
 };
 
-typedef struct hm_ast_node hm_ast_node;
-struct hm_ast_node {
-	size_t id;
-	union {
-		struct {
-			size_t num_children;
-			hm_ast_node *children[];
-		};
-		cu_str txt;
-	};
-};
 
 typedef struct {
 	size_t n_ids;
 	size_t capacity;
-	hm_type **fst_id;
+	hm_type **idlist;
 	cu_arena *elem_backing;
 	cu_alloc *alloc;
 } hm_type_record;
@@ -82,7 +70,7 @@ int hm_type_record_init(hm_type_record *rec, cu_alloc *alloc);
 static inline void hm_type_record_free(hm_type_record *rec)
 {
 	cu_arena_free(rec->elem_backing);
-	cu_freearray(rec->fst_id, rec->capacity, sizeof(hm_type *), rec->alloc);
+	cu_freearray(rec->idlist, rec->capacity, sizeof(hm_type *), rec->alloc);
 }
 int hm_type_record_reserve(hm_type_record *rec, size_t new_n_ids);
 
@@ -95,7 +83,7 @@ static inline size_t hm_type_record_register(hm_type_record *rec, hm_type *type)
 	if (hm_type_record_reserve(rec, rec->n_ids + 1) != 0) {
 		return 0;
 	}
-	rec->fst_id[rec->n_ids] = type;
+	rec->idlist[rec->n_ids] = type;
 	return rec->n_ids++;
 }
 
@@ -141,3 +129,15 @@ cu_str hm_parse_scope(const hm_tlit_lut *lut, cu_str *txt);
 cu_str hm_parse_chr(const hm_tlit_lut *lut, cu_str *txt);
 cu_str hm_parse_numeric(const hm_tlit_lut *lut, cu_str *txt);
 
+
+typedef struct hm_ast_node hm_ast_node;
+struct hm_ast_node {
+	size_t id;
+	union {
+		struct {
+			size_t num_children;
+			hm_ast_node *children[];
+		};
+		cu_str txt;
+	};
+};
