@@ -25,64 +25,119 @@
 
 
 // Kinds of types
-enum { // kind
-	// Fundamental types
-	HM_TYPE_FUNDAMENTAL,
+enum {
+	// Type without a kind; placeholder
+	HM_KIND_NULL = 0,
 
-	// Complex types
-	HM_TYPE_SUM,
-	HM_TYPE_PROD,
-	HM_TYPE_KLEENE, // matches as many as possible of a child type
+	// Fundamental type; parsed with a provided function pointer
+	HM_KIND_FUNDAMENTAL,
+
+	// Algebraic types
+	HM_KIND_SUM, // parsed as any of its children
+	HM_KIND_PROD, // parsed as all of its children, in sequence
+
+	// Kleene type; matches an infinite sequence of a given type
+	HM_KIND_KLEENE,
 };
+
+typedef cu_str (*hm_parse_func)(const hm_tlit_lut *lut, cu_str *txt);
+
+typedef struct hm_type hm_type;
+
+struct hm_type {
+	size_t id;
+	uint8_t kind;
+	union {
+		struct {
+			size_t num_children;
+			hm_type *children[];
+		};
+		hm_type *kleene_type;
+		hm_parse_func pf;
+	};
+};
+
+typedef struct hm_ast_node hm_ast_node;
+struct hm_ast_node {
+	size_t id;
+	union {
+		struct {
+			size_t num_children;
+			hm_ast_node *children[];
+		};
+		cu_str txt;
+	};
+};
+
+typedef struct {
+	size_t n_ids;
+	size_t capacity;
+	hm_type **fst_id;
+	cu_arena *elem_backing;
+	cu_alloc *alloc;
+} hm_type_record;
+
+// Initializes the hm_type_record with the fundamental types.
+int hm_type_record_init(hm_type_record *rec, cu_alloc *alloc);
+static inline void hm_type_record_free(hm_type_record *rec)
+{
+	cu_arena_free(rec->elem_backing);
+	cu_freearray(rec->fst_id, rec->capacity, sizeof(hm_type *), rec->alloc);
+}
+int hm_type_record_reserve(hm_type_record *rec, size_t new_n_ids);
+
+// Registers a new type to the record, returns its id
+//
+// If this fails, 0 is returned.
+// IDs are therefore nonzero.
+static inline size_t hm_type_record_register(hm_type_record *rec, hm_type *type)
+{
+	if (hm_type_record_reserve(rec, rec->n_ids + 1) != 0) {
+		return 0;
+	}
+	rec->fst_id[rec->n_ids] = type;
+	return rec->n_ids++;
+}
+
+static inline hm_type *hm_type_alloc(hm_type_record *rec, size_t nchild)
+{
+	return cu_arena_alloc(sizeof(hm_type) + nchild * sizeof(hm_type *), rec->elem_backing);
+}
+
 
 // fundamental and reserved typeIDs
 enum {
-	// Denotes a nameless type
-	// Not a fundamental type, but reserved
-	HM_RESERVED_NAMELESS = 0,
+	// Denotes a nameless, placeholder type
+	HM_ID_NULL = 0,
 
 	// Fundamental typeIDs; these are syntactic concepts
 	HM_ID_WS,
 	HM_ID_ESCCHR,
+	HM_ID_KLEENE,
+	HM_ID_EXPANDER,
+	HM_ID_NAMESPACE,
 	HM_ID_MACRO,
 	HM_ID_BEGINTYPE,
 	HM_ID_ALTERNATETYPE,
-	HM_ID_ESCOPE,
 	HM_ID_SCOPE,
 	HM_ID_CHR,
 	HM_ID_NUMERIC,
 
-	// Reserved for the type of the def-args and the typedef-args
-	HM_ID_DEF_ARGS,
-	HM_ID_TYPEDEF_ARGS,
-
-	HM_NUM_RESERVED_TYPEIDS,
+	HM_NUM_FUND_TYPEIDS,
 };
 
-
-typedef struct hm_type hm_type;
-struct hm_type {
-	size_t num_children;
-	uintptr_t id;
-	uint8_t kind;
-	hm_type *children[];
-};
-
-typedef struct {
-	
-} hm_typelist;
+extern hm_parse_func hm_parse_fns[HM_NUM_FUND_TYPEIDS];
 
 // all of these assume txt has nonzero length
 cu_str hm_parse_ws(const hm_tlit_lut *lut, cu_str *txt);
 cu_str hm_parse_escchr(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_kleene(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_expander(const hm_tlit_lut *lut, cu_str *txt);
+cu_str hm_parse_namespace(const hm_tlit_lut *lut, cu_str *txt);
 cu_str hm_parse_macro(const hm_tlit_lut *lut, cu_str *txt);
 cu_str hm_parse_begintype(const hm_tlit_lut *lut, cu_str *txt);
 cu_str hm_parse_alternatetype(const hm_tlit_lut *lut, cu_str *txt);
-cu_str hm_parse_escope(const hm_tlit_lut *lut, cu_str *txt);
 cu_str hm_parse_scope(const hm_tlit_lut *lut, cu_str *txt);
 cu_str hm_parse_chr(const hm_tlit_lut *lut, cu_str *txt);
 cu_str hm_parse_numeric(const hm_tlit_lut *lut, cu_str *txt);
-
-hm_type *hm_type_create(size_t num_children, cu_arena *arena);
-
 

@@ -21,27 +21,27 @@
 
 static void test_hm_buf(void)
 {
-	cu_str s1 = cu_cstr_cast("text from\nfirst file\n");
-	cu_str s2 = cu_cstr_cast("text from\nsecond file");
+	cu_str s1 = cu_str_from_cstr("text from\nfirst file\n");
+	cu_str s2 = cu_str_from_cstr("text from\nsecond file");
 	hm_buf buf;
 	hm_buf_init(&buf);
 	hm_buf_push(&buf, s1, NULL);
 	hm_buf_push(&buf, s2, NULL);
 	cu_str contents = hm_buf_contents(&buf);
-	dbgassert(cu_streq(contents, cu_cstr_cast("text from\nsecond filetext from\nfirst file\n")));
+	dbgassert(cu_str_eq(contents, cu_str_from_cstr("text from\nsecond filetext from\nfirst file\n")));
 	hm_buf_pop(&buf, 5);
 	contents = hm_buf_contents(&buf);
-	dbgassert(cu_streq(contents, cu_cstr_cast("from\nsecond filetext from\nfirst file\n")));
+	dbgassert(cu_str_eq(contents, cu_str_from_cstr("from\nsecond filetext from\nfirst file\n")));
 
 	hm_buf_free(&buf, NULL);
 }
 
 static void test_hm_tag(void)
 {
-	cu_str s1 = cu_cstr_cast("text from\nfirst file\n");
-	cu_str s2 = cu_cstr_cast("text from\nsecond file");
-	hm_tag tag1 = HM_TAG_DEFAULT(cu_cstr_cast("tag one"), s1.len);
-	hm_tag tag2 = HM_TAG_DEFAULT(cu_cstr_cast("tag two"), s2.len);
+	cu_str s1 = cu_str_from_cstr("text from\nfirst file\n");
+	cu_str s2 = cu_str_from_cstr("text from\nsecond file");
+	hm_tag tag1 = HM_TAG_DEFAULT(cu_str_from_cstr("tag one"), s1.len);
+	hm_tag tag2 = HM_TAG_DEFAULT(cu_str_from_cstr("tag two"), s2.len);
 	// pretending s1 pushed onto buf, then s2
 	hm_taglist tl;
 	hm_taglist_init(&tl);
@@ -54,7 +54,7 @@ static void test_hm_tag(void)
 	// actual tests:
 	
 	hm_tag curtag = hm_taglist_peek(&tl);
-	dbgassert(cu_streq(cu_cstr_cast("tag two"), curtag.txt));
+	dbgassert(cu_str_eq(cu_str_from_cstr("tag two"), curtag.txt));
 	dbgassert(curtag.row == 1);
 	dbgassert(curtag.col == 1);
 	dbgassert(curtag.n_to_ignore == 0);
@@ -65,29 +65,29 @@ static void test_hm_tag(void)
 		.len = 13
 	});
 	curtag = hm_taglist_peek(&tl);
-	dbgassert(cu_streq(cu_cstr_cast("tag two"), curtag.txt));
+	dbgassert(cu_str_eq(cu_str_from_cstr("tag two"), curtag.txt));
 	dbgassert(curtag.row == 2);
 	dbgassert(curtag.col == 4);
 	dbgassert(curtag.n_to_ignore == 0);
 	dbgassert(curtag.tag_len == s2.len - 13);
 
-	hm_taglist_advance(&tl, cu_cstr_cast("ond fileasdf"));
+	hm_taglist_advance(&tl, cu_str_from_cstr("ond fileasdf"));
 	curtag = hm_taglist_peek(&tl);
-	dbgassert(cu_streq(cu_cstr_cast("tag one"), curtag.txt));
+	dbgassert(cu_str_eq(cu_str_from_cstr("tag one"), curtag.txt));
 	dbgassert(curtag.row == 1);
 	dbgassert(curtag.col == 1);
 	dbgassert(curtag.n_to_ignore == 2);
 	dbgassert(curtag.tag_len == s1.len);
 
-	hm_taglist_advance(&tl, cu_cstr_cast("ghtext from\n"));
+	hm_taglist_advance(&tl, cu_str_from_cstr("ghtext from\n"));
 	curtag = hm_taglist_peek(&tl);
-	dbgassert(cu_streq(cu_cstr_cast("tag one"), curtag.txt));
+	dbgassert(cu_str_eq(cu_str_from_cstr("tag one"), curtag.txt));
 	dbgassert(curtag.row == 2);
 	dbgassert(curtag.col == 1);
 	dbgassert(curtag.n_to_ignore == 0);
 	dbgassert(curtag.tag_len == s1.len - 10);
 
-	hm_taglist_advance(&tl, cu_cstr_cast("first file\n"));
+	hm_taglist_advance(&tl, cu_str_from_cstr("first file\n"));
 	dbgassert(hm_taglist_len(&tl) == 0);
 
 	hm_taglist_free(&tl, NULL);
