@@ -125,9 +125,19 @@ cu_str hm_parse_chr(const hm_tlit_lut *lut, cu_str *txt);
 cu_str hm_parse_numeric(const hm_tlit_lut *lut, cu_str *txt);
 
 
-
-// still need to write parser
 typedef struct hm_ast_node hm_ast_node;
+typedef struct hm_ast_veclist_block hm_ast_veclist_block;
+typedef struct {
+	size_t nel;
+	hm_ast_veclist_block *elems;
+} hm_ast_veclist;
+
+hm_ast_node *hm_ast_veclist_at(hm_ast_veclist *vl, size_t ind);
+static inline size_t hm_ast_veclist_len(const hm_ast_veclist *vl)
+{
+	return vl->nel;
+}
+
 struct hm_ast_node {
 	size_t id;
 	union {
@@ -135,6 +145,11 @@ struct hm_ast_node {
 			size_t num_children;
 			hm_ast_node *children[];
 		};
+		hm_ast_veclist kleene_elems;
 		cu_str txt;
 	};
 };
+
+hm_ast_node *
+hm_ast_generate(cu_str *txt, hm_type *target, const hm_tlit_lut *lut,
+	cu_arena *backing);

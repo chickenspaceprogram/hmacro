@@ -3,6 +3,7 @@
 #include <cu/bitmanip.h>
 
 #define DEFAULT_ID_CAPACITY (cu_bit_ceil(HM_NUM_FUND_TYPEIDS) << 2)
+#define DEFAULT_AST_VL_CAPACITY 16
 
 hm_parse_func hm_parse_fns[HM_NUM_FUND_TYPEIDS] = {
 	NULL,
@@ -79,7 +80,8 @@ cu_str hm_parse_namespace(const hm_tlit_lut *lut, cu_str *txt)
 	*txt = cu_str_rmprefix(*txt, 1);
 	return retval;
 }
-static inline cu_str hm_parse_ident(const hm_tlit_lut *lut, cu_str *txt, uint8_t fst_ctype)
+static inline cu_str
+hm_parse_ident(const hm_tlit_lut *lut, cu_str *txt, uint8_t fst_ctype)
 {
 	assert(txt->len > 0 && "string must have nonzero length to be parsed");
 	if (txt->len < 2)
@@ -222,7 +224,7 @@ int hm_type_record_reserve(hm_type_record *rec, size_t new_n_ids)
 
 static inline hm_type **rec_lookup_internal(hm_type_record *rec, size_t id)
 {
-	if (id < rec->n_ids)
+	if (id >= rec->n_ids)
 		return NULL;
 	for (hm_type_block *blk = rec->idlist; blk != NULL; blk = blk->next) {
 		if (id < blk->capacity)
@@ -234,10 +236,9 @@ static inline hm_type **rec_lookup_internal(hm_type_record *rec, size_t id)
 }
 size_t hm_type_record_register(hm_type_record *rec, hm_type *type)
 {
-	int rv = hm_type_record_reserve(rec, rec->n_ids + 1);
+	int rv = hm_type_record_reserve(rec, ++rec->n_ids);
 	if (rv != 0)
 		return rv;
-	++rec->n_ids;
 	hm_type **res = rec_lookup_internal(rec, rec->n_ids - 1);
 	assert(res != NULL && "should have space for the type");
 	*res = type;
@@ -249,4 +250,162 @@ hm_type *hm_type_record_lookup(hm_type_record *rec, size_t id)
 	if (res == NULL)
 		return NULL;
 	return *res;
+}
+
+
+typedef struct hm_ast_veclist_block hm_ast_veclist_block;
+static inline hm_ast_veclist hm_ast_veclist_init(void)
+{
+	return (hm_ast_veclist){
+		.nel = 0,
+		.elems = NULL,
+	};
+}
+
+struct hm_ast_veclist_block {
+	hm_ast_veclist_block *next;
+	size_t capacity;
+	hm_ast_node *data[];
+};
+
+
+static inline hm_ast_node **ast_veclist_find_internal(hm_ast_veclist *vl,
+	size_t ind)
+{
+	if (ind >= vl->nel)
+		return NULL;
+	for (hm_ast_veclist_block *blk = vl->elems; blk != NULL;
+		blk = blk->next
+	) {
+		if (ind < blk->capacity) {
+			return blk->data + ind;
+		}
+		ind -= blk->capacity;
+	}
+	assert(0 && "veclist invariants violated");
+}
+
+static inline int hm_ast_veclist_reserve(hm_ast_veclist *vl, size_t nel,
+	cu_arena *arena)
+{
+	if (nel == 0)
+		return 0;
+	if (vl->elems == NULL) {
+		size_t minsz = cu_bit_ceil(nel);
+		minsz = minsz < DEFAULT_AST_VL_CAPACITY 
+			? DEFAULT_AST_VL_CAPACITY : minsz;
+		vl->elems = cu_arena_alloc(minsz * sizeof(hm_ast_node *)
+			+ sizeof(hm_ast_veclist_block), arena);
+		if (vl->elems == NULL)
+			return -1;
+		else
+			return 0;
+	}
+
+	size_t total_sz = 0;
+	hm_ast_veclist_block *last_blk;
+	for (hm_ast_veclist_block *blk = vl->elems; blk != NULL;
+		blk = blk->next
+	) {
+		total_sz += blk->capacity;
+		last_blk = blk;
+	}
+	assert(last_blk != NULL && "shouldn't have last elem be null");
+	size_t alloc_sz = cu_bit_ceil(total_sz + nel) - total_sz;
+	alloc_sz = alloc_sz * sizeof(hm_ast_node *)
+		+ sizeof(hm_ast_veclist_block);
+	last_blk->next = cu_arena_alloc(alloc_sz, arena);
+	if (last_blk->next == NULL)
+		return -1;
+	return 0;
+}
+static inline int hm_ast_veclist_push(hm_ast_veclist *vl, hm_ast_node *nd,
+	cu_arena *arena)
+{
+	int retval = hm_ast_veclist_reserve(vl, ++vl->nel, arena);
+	if (retval != 0)
+		return retval;
+	hm_ast_node **nd_ptr = ast_veclist_find_internal(vl, vl->nel - 1);
+	assert(nd != NULL && "should have space for nd");
+	*nd_ptr = nd;
+	return 0;
+}
+hm_ast_node *hm_ast_veclist_at(hm_ast_veclist *vl, size_t ind)
+{
+	hm_ast_node **nd = ast_veclist_find_internal(vl, ind);
+	if (nd == NULL)
+		return NULL;
+	return *nd;
+}
+
+
+
+
+hm_ast_node *
+hm_ast_generate(cu_str *txt, hm_type *target, const hm_tlit_lut *lut,
+	cu_arena *backing)
+{
+	if (txt->len == 0)
+		return NULL;
+	hm_ast_node *nd = NULL;
+	if (target->kind == HM_KIND_FUNDAMENTAL) {
+		cu_str item = target->pf(lut, txt);
+		if (cu_str_isnil(item))
+			return NULL;
+		nd = cu_arena_alloc(sizeof(hm_ast_node), backing);
+		nd->id = target->id;
+		nd->txt = item;
+	}
+	else if (target->kind == HM_KIND_SUM) {
+		for (size_t i = 0; i < target->num_children; ++i) {
+			cu_str tmp = *txt;
+			nd = hm_ast_generate(&tmp, target->children[i],
+				lut, backing);
+			if (nd != NULL) {
+				*txt = tmp;
+				break;
+			}
+			nd = NULL;
+		}
+	}
+	else if (target->kind == HM_KIND_PROD) {
+		{
+			size_t bufsz = sizeof(hm_ast_node) 
+				+ sizeof(hm_ast_node *) * target->num_children;
+			nd = cu_arena_alloc(bufsz, backing);
+		}
+		cu_str tmp = *txt;
+		nd->id = target->id;
+		for (size_t i = 0; i < target->num_children; ++i) {
+			nd->children[i] = hm_ast_generate(&tmp,
+				target->children[i], lut, backing);
+			if (nd->children[i] == NULL)
+				return NULL;
+		}
+		*txt = tmp;
+	}
+	else if (target->kind == HM_KIND_KLEENE) {
+		hm_ast_veclist vl = hm_ast_veclist_init();
+		cu_str tmp = *txt;
+		for (
+			nd = hm_ast_generate(
+				&tmp, target->kleene_type, lut, backing);
+			nd != NULL;
+			nd = hm_ast_generate(
+				&tmp, target->kleene_type, lut, backing)
+		) {
+			hm_ast_veclist_push(&vl, nd, backing);
+		}
+		nd = cu_arena_alloc(sizeof(hm_ast_node), backing);
+		if (nd == NULL)
+			return NULL;
+		nd->id = target->id;
+		nd->kleene_elems = vl;
+		*txt = tmp;
+	}
+	else {
+		assert(0 && "Invariants violated");
+	}
+	return nd;
+
 }
