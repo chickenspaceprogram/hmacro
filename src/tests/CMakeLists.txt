@@ -18,11 +18,18 @@
 
 cmake_minimum_required(VERSION 3.21)
 
-add_executable(buffer-test test-buffer.c)
-target_link_libraries(buffer-test PRIVATE hmacro-lib)
+add_executable(test-buffer test-buffer.c)
+target_link_libraries(test-buffer PRIVATE hmacro-lib)
 
 add_test(
-	NAME buffer-test
-	COMMAND $<TARGET_FILE:buffer-test>
+	NAME test-buffer
+	COMMAND $<TARGET_FILE:test-buffer>
 )
 
+add_executable(test-types test-types.c)
+target_link_libraries(test-types PRIVATE hmacro-lib)
+
+add_test(
+	NAME test-types
+	COMMAND $<TARGET_FILE:test-types>
+)

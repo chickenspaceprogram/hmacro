@@ -23,12 +23,27 @@
 #define DEFAULT_ID_CAPACITY (cu_bit_ceil(HM_NUM_FUND_TYPEIDS) << 2)
 #define DEFAULT_AST_VL_CAPACITY 16
 
+static cu_str hm_parse_ws(const hm_tlit_lut *lut, cu_str *txt);
+static cu_str hm_parse_escchr(const hm_tlit_lut *lut, cu_str *txt);
+static cu_str hm_parse_kleene(const hm_tlit_lut *lut, cu_str *txt);
+static cu_str hm_parse_expander(const hm_tlit_lut *lut, cu_str *txt);
+static cu_str hm_parse_negative(const hm_tlit_lut *lut, cu_str *txt);
+static cu_str hm_parse_namespace(const hm_tlit_lut *lut, cu_str *txt);
+static cu_str hm_parse_macro(const hm_tlit_lut *lut, cu_str *txt);
+static cu_str hm_parse_begintype(const hm_tlit_lut *lut, cu_str *txt);
+static cu_str hm_parse_alternatetype(const hm_tlit_lut *lut, cu_str *txt);
+static cu_str hm_parse_scope(const hm_tlit_lut *lut, cu_str *txt);
+static cu_str hm_parse_chr(const hm_tlit_lut *lut, cu_str *txt);
+static cu_str hm_parse_numeric(const hm_tlit_lut *lut, cu_str *txt);
+
+
 hm_parse_func hm_parse_fns[HM_NUM_FUND_TYPEIDS] = {
 	NULL,
 	hm_parse_ws,
 	hm_parse_escchr,
 	hm_parse_kleene,
 	hm_parse_expander,
+	hm_parse_negative,
 	hm_parse_namespace,
 	hm_parse_macro,
 	hm_parse_begintype,
@@ -39,7 +54,7 @@ hm_parse_func hm_parse_fns[HM_NUM_FUND_TYPEIDS] = {
 };
 
 
-cu_str hm_parse_ws(const hm_tlit_lut *lut, cu_str *txt)
+static cu_str hm_parse_ws(const hm_tlit_lut *lut, cu_str *txt)
 {
 	assert(txt->len > 0 && "string must have nonzero length to be parsed");
 	size_t nws = 0;
@@ -54,7 +69,7 @@ cu_str hm_parse_ws(const hm_tlit_lut *lut, cu_str *txt)
 	*txt = cu_str_rmprefix(*txt, nws);
 	return retval;
 }
-cu_str hm_parse_escchr(const hm_tlit_lut *lut, cu_str *txt)
+static cu_str hm_parse_escchr(const hm_tlit_lut *lut, cu_str *txt)
 {
 	assert(txt->len > 0 && "string must have nonzero length to be parsed");
 	if (txt->len < 2)
@@ -67,7 +82,7 @@ cu_str hm_parse_escchr(const hm_tlit_lut *lut, cu_str *txt)
 	*txt = cu_str_rmprefix(*txt, 2);
 	return retval;
 }
-cu_str hm_parse_kleene(const hm_tlit_lut *lut, cu_str *txt)
+static cu_str hm_parse_kleene(const hm_tlit_lut *lut, cu_str *txt)
 {
 	assert(txt->len > 0 && "string must have nonzero length to be parsed");
 	if (hm_tlit_octet(lut, txt->buf[0]) != HM_KLEENE)
@@ -76,7 +91,7 @@ cu_str hm_parse_kleene(const hm_tlit_lut *lut, cu_str *txt)
 	*txt = cu_str_rmprefix(*txt, 1);
 	return retval;
 }
-cu_str hm_parse_expander(const hm_tlit_lut *lut, cu_str *txt)
+static cu_str hm_parse_expander(const hm_tlit_lut *lut, cu_str *txt)
 {
 	assert(txt->len > 0 && "string must have nonzero length to be parsed");
 	if (hm_tlit_octet(lut, txt->buf[0]) != HM_EXPANDER)
@@ -85,52 +100,92 @@ cu_str hm_parse_expander(const hm_tlit_lut *lut, cu_str *txt)
 	*txt = cu_str_rmprefix(*txt, 1);
 	return retval;
 }
-cu_str hm_parse_namespace(const hm_tlit_lut *lut, cu_str *txt)
+static cu_str hm_parse_negative(const hm_tlit_lut *lut, cu_str *txt)
 {
 	assert(txt->len > 0 && "string must have nonzero length to be parsed");
-	if (txt->len < 2)
+	if (hm_tlit_octet(lut, txt->buf[0]) != HM_NEGATIVE)
+		return CU_NIL_STR;
+	cu_str retval = cu_str_substr(*txt, 0, 1);
+	*txt = cu_str_rmprefix(*txt, 1);
+	return retval;
+}
+static inline cu_str
+hm_parse_ident(const hm_tlit_lut *lut, cu_str *nametxt)
+{
+	assert(nametxt->len > 0 && "string must have nonzero length to be parsed");
+	assert(nametxt->len > 1 && "string must have length of 1 to be a macro name");
+	if (hm_tlit_octet(lut, nametxt->buf[0]) != HM_MACRO_NAME)
+		return CU_NIL_STR;
+	size_t end_loc;
+	for (end_loc = 1; end_loc < nametxt->len; ++end_loc) {
+		uint8_t ctype = hm_tlit_octet(lut, nametxt->buf[end_loc]);
+		if (ctype != HM_MACRO_NAME && ctype != HM_NUMERIC)
+			break;
+	}
+	cu_str retval = cu_str_substr(*nametxt, 1, end_loc);
+	*nametxt = cu_str_rmprefix(*nametxt, end_loc);
+	return retval;
+}
+
+static cu_str hm_parse_namespace(const hm_tlit_lut *lut, cu_str *txt)
+{
+	assert(txt->len > 0 && "string must have nonzero length to be parsed");
+	if (txt->len < 3)
 		return CU_NIL_STR;
 	if (hm_tlit_octet(lut, txt->buf[0]) != HM_TYPEALTERNATE)
 		return CU_NIL_STR;
 	if (hm_tlit_octet(lut, txt->buf[1]) != HM_TYPEALTERNATE)
 		return CU_NIL_STR;
-	cu_str retval = cu_str_substr(*txt, 0, 2);
-	*txt = cu_str_rmprefix(*txt, 1);
+	cu_str tmp = cu_str_rmprefix(*txt, 2);
+	cu_str retval = hm_parse_ident(lut, &tmp);
+	if (cu_str_isnil(retval))
+		return CU_NIL_STR;
+	*txt = tmp;
 	return retval;
 }
-static inline cu_str
-hm_parse_ident(const hm_tlit_lut *lut, cu_str *txt, uint8_t fst_ctype)
+static cu_str hm_parse_macro(const hm_tlit_lut *lut, cu_str *txt)
 {
 	assert(txt->len > 0 && "string must have nonzero length to be parsed");
 	if (txt->len < 2)
 		return CU_NIL_STR;
-	if (hm_tlit_octet(lut, txt->buf[0]) != fst_ctype)
+	if (hm_tlit_octet(lut, txt->buf[0] != HM_MACRO_SIGN))
 		return CU_NIL_STR;
-	if (hm_tlit_octet(lut, txt->buf[1]) != HM_MACRO_NAME)
+	cu_str tmp = cu_str_rmprefix(*txt, 1);
+	cu_str retval = hm_parse_ident(lut, &tmp);
+	if (cu_str_isnil(retval))
 		return CU_NIL_STR;
-	size_t end_loc;
-	for (end_loc = 2; end_loc < txt->len; ++end_loc) {
-		if (hm_tlit_octet(lut, txt->buf[end_loc]) != HM_MACRO_NAME)
-			break;
-	}
-	cu_str retval = cu_str_substr(*txt, 1, end_loc);
-	*txt = cu_str_rmprefix(*txt, end_loc);
+	*txt = tmp;
 	return retval;
 }
-
-cu_str hm_parse_macro(const hm_tlit_lut *lut, cu_str *txt)
+static cu_str hm_parse_begintype(const hm_tlit_lut *lut, cu_str *txt)
 {
-	return hm_parse_ident(lut, txt, HM_MACRO_SIGN);
+	assert(txt->len > 0 && "string must have nonzero length to be parsed");
+	if (txt->len < 2)
+		return CU_NIL_STR;
+	if (hm_tlit_octet(lut, txt->buf[0] != HM_TYPESIGN))
+		return CU_NIL_STR;
+	cu_str tmp = cu_str_rmprefix(*txt, 1);
+	cu_str retval = hm_parse_ident(lut, &tmp);
+	if (cu_str_isnil(retval))
+		return CU_NIL_STR;
+	*txt = tmp;
+	return retval;
 }
-cu_str hm_parse_begintype(const hm_tlit_lut *lut, cu_str *txt)
+static cu_str hm_parse_alternatetype(const hm_tlit_lut *lut, cu_str *txt)
 {
-	return hm_parse_ident(lut, txt, HM_TYPESIGN);
+	assert(txt->len > 0 && "string must have nonzero length to be parsed");
+	if (txt->len < 2)
+		return CU_NIL_STR;
+	if (hm_tlit_octet(lut, txt->buf[0] != HM_TYPEALTERNATE))
+		return CU_NIL_STR;
+	cu_str tmp = cu_str_rmprefix(*txt, 1);
+	cu_str retval = hm_parse_ident(lut, &tmp);
+	if (cu_str_isnil(retval))
+		return CU_NIL_STR;
+	*txt = tmp;
+	return retval;
 }
-cu_str hm_parse_alternatetype(const hm_tlit_lut *lut, cu_str *txt)
-{
-	return hm_parse_ident(lut, txt, HM_TYPEALTERNATE);
-}
-cu_str hm_parse_scope(const hm_tlit_lut *lut, cu_str *txt)
+static cu_str hm_parse_scope(const hm_tlit_lut *lut, cu_str *txt)
 {
 	assert(txt->len > 0 && "string must have nonzero length to be parsed");
 	if (txt->len < 2)
@@ -154,14 +209,14 @@ cu_str hm_parse_scope(const hm_tlit_lut *lut, cu_str *txt)
 	*txt = cu_str_rmprefix(*txt, end_chr + 1);
 	return retval;
 }
-cu_str hm_parse_chr(const hm_tlit_lut *lut, cu_str *txt)
+static cu_str hm_parse_chr(const hm_tlit_lut *lut, cu_str *txt)
 {
 	assert(txt->len > 0 && "string must have nonzero length to be parsed");
 	cu_str retval = cu_str_substr(*txt, 0, 1);
 	*txt = cu_str_rmprefix(*txt, 1);
 	return retval;
 }
-cu_str hm_parse_numeric(const hm_tlit_lut *lut, cu_str *txt)
+static cu_str hm_parse_numeric(const hm_tlit_lut *lut, cu_str *txt)
 {
 	assert(txt->len > 0 && "string must have nonzero length to be parsed");
 	uint8_t fst_ctype = hm_tlit_octet(lut, txt->buf[0]);
@@ -184,6 +239,23 @@ cu_str hm_parse_numeric(const hm_tlit_lut *lut, cu_str *txt)
 	return retval;
 }
 
+/*
+static inline int add_escope(hm_type_record *rec)
+{
+	hm_type *val = hm_type_alloc(rec, 2);
+	if (val == NULL)
+		return -1;
+	val->id = HM_IDRES_ESCOPE;
+	val->kind = HM_KIND_PROD;
+	val->num_children = 2;
+	val->children[0] = hm_type_record_lookup(rec, HM_ID_BEGINTYPE);
+	val->children[1] = hm_type_alloc(rec, 0);
+	hm_type *kleene = val->children[1];
+	if (kleene == NULL)
+		return -1;
+	kleene->id = hm_type_record_lookup(rec, HM_ID_
+}
+*/
 int hm_type_record_init(hm_type_record *rec, cu_arena *backing)
 {
 	rec->n_ids = 0;
@@ -420,6 +492,12 @@ hm_ast_generate(cu_str *txt, hm_type *target, const hm_tlit_lut *lut,
 		nd->id = target->id;
 		nd->kleene_elems = vl;
 		*txt = tmp;
+	}
+	else if (target->kind == HM_KIND_MAYBE) {
+		nd = cu_arena_alloc(sizeof(hm_ast_node), backing);
+		nd->id = target->id;
+		nd->maybe_child = hm_ast_generate(txt, target->maybe_type,
+			lut, backing);
 	}
 	else {
 		assert(0 && "Invariants violated");

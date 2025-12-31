@@ -36,8 +36,8 @@ enum {
 	HM_KIND_SUM, // parsed as any of its children
 	HM_KIND_PROD, // parsed as all of its children, in sequence
 
-	// Kleene type; matches an infinite sequence of a given type
-	HM_KIND_KLEENE,
+	HM_KIND_KLEENE,	// regex *
+	HM_KIND_MAYBE,	// regex ?
 };
 
 typedef cu_str (*hm_parse_func)(const hm_tlit_lut *lut, cu_str *txt);
@@ -52,6 +52,7 @@ struct hm_type {
 			hm_type *children[];
 		};
 		hm_type *kleene_type;
+		hm_type *maybe_type;
 		hm_parse_func pf;
 	};
 };
@@ -98,31 +99,29 @@ enum {
 	HM_ID_ESCCHR,
 	HM_ID_KLEENE,
 	HM_ID_EXPANDER,
+	HM_ID_NEGATIVE,
 	HM_ID_NAMESPACE,
 	HM_ID_MACRO,
 	HM_ID_BEGINTYPE,
 	HM_ID_ALTERNATETYPE,
 	HM_ID_SCOPE,
 	HM_ID_CHR,
+
+
 	HM_ID_NUMERIC,
 
 	HM_NUM_FUND_TYPEIDS,
+
+	// reserved types
+	HM_IDRES_ESCOPE,
+	HM_IDRES_TYPELIST,
+	HM_IDRES_DEFAULT,
+	HM_IDRES_DEFARG,
+	HM_IDRES_IFARG,
 };
 
-extern hm_parse_func hm_parse_fns[HM_NUM_FUND_TYPEIDS];
-
 // all of these assume txt has nonzero length
-cu_str hm_parse_ws(const hm_tlit_lut *lut, cu_str *txt);
-cu_str hm_parse_escchr(const hm_tlit_lut *lut, cu_str *txt);
-cu_str hm_parse_kleene(const hm_tlit_lut *lut, cu_str *txt);
-cu_str hm_parse_expander(const hm_tlit_lut *lut, cu_str *txt);
-cu_str hm_parse_namespace(const hm_tlit_lut *lut, cu_str *txt);
-cu_str hm_parse_macro(const hm_tlit_lut *lut, cu_str *txt);
-cu_str hm_parse_begintype(const hm_tlit_lut *lut, cu_str *txt);
-cu_str hm_parse_alternatetype(const hm_tlit_lut *lut, cu_str *txt);
-cu_str hm_parse_scope(const hm_tlit_lut *lut, cu_str *txt);
-cu_str hm_parse_chr(const hm_tlit_lut *lut, cu_str *txt);
-cu_str hm_parse_numeric(const hm_tlit_lut *lut, cu_str *txt);
+extern hm_parse_func hm_parse_fns[HM_NUM_FUND_TYPEIDS];
 
 
 typedef struct hm_ast_node hm_ast_node;
@@ -145,6 +144,7 @@ struct hm_ast_node {
 			size_t num_children;
 			hm_ast_node *children[];
 		};
+		hm_ast_node *maybe_child;
 		hm_ast_veclist kleene_elems;
 		cu_str txt;
 	};
